@@ -28,7 +28,6 @@ class ReportManager:
     Manages the building and export of 
     various types of reports
     """
-
     def __init__(self, config):
         """
         Parameters
@@ -193,7 +192,7 @@ class ReportManager:
 
     def _get_gpu_stats(self, model_name):
         """
-        Gets names and memory infos 
+        Gets names and memory infos
         of GPUs used in best measurements
         """
 
