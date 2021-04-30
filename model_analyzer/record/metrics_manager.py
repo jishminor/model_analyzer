@@ -132,7 +132,10 @@ class MetricsManager:
             perf_analyzer_metrics = perf_analyzer_metrics_or_status
 
         # Get metrics for model inference and combine metrics that do not have GPU ID
-        model_gpu_metrics = self._get_gpu_inference_metrics()
+        if self._dcgm_monitor:
+            model_gpu_metrics = self._get_gpu_inference_metrics()
+        else:
+            model_gpu_metrics = defaultdict(list)
         model_cpu_metrics = self._get_cpu_inference_metrics()
         model_non_gpu_metrics = list(perf_analyzer_metrics.values()) + list(
             model_cpu_metrics.values())

@@ -330,6 +330,13 @@ class AnalyzerConfig:
                         default_value=False,
                         description="Disable run config search."))
         self._add_config(
+            ConfigField('run_config_search_cb',
+                        flags=['--run-config-search-cb'],
+                        field_type=ConfigPrimitive(bool),
+                        parser_args={'action': 'store_true'},
+                        default_value=False,
+                        description="Run contextual bandit config search."))
+        self._add_config(
             ConfigField(
                 'run_config_search_max_preferred_batch_size',
                 flags=['--run-config-search-max-preferred-batch-size'],
@@ -547,7 +554,7 @@ class AnalyzerConfig:
                 field_type=ConfigListString(),
                 default_value='all',
                 description="List of GPU UUIDs to be used for the profiling. "
-                "Use 'all' to profile all the GPUs visible by CUDA."))
+                "Use 'all'/'none' to profile all/none of the GPUs visible by CUDA."))
         self._add_config(
             ConfigField(
                 'output_model_repository_path',

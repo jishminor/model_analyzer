@@ -31,7 +31,7 @@ ENV DCGM_VERSION=2.0.13
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y python3-dev wkhtmltopdf
+    apt-get install -y python3-dev wkhtmltopdf python3-pdfkit libboost-dev libboost-python-dev libboost-thread-dev libboost-program-options-dev libboost-system-dev libboost-math-dev libboost-test-dev zlib1g-dev cmake g++
 
 RUN mkdir -p /opt/triton-model-analyzer
 
@@ -48,8 +48,9 @@ RUN chmod +x build_wheel.sh && \
     rm -f perf_analyzer
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install nvidia-pyindex && \
-    python3 -m pip install wheels/triton_model_analyzer-*-manylinux1_x86_64.whl
+    python3 -m pip install wheels/triton_model_analyzer-*-manylinux1_x86_64.whl && \
+    python3 -m pip install vowpalwabbit
 
-ENTRYPOINT []
+# ENTRYPOINT []
 ENV MODEL_ANALYZER_VERSION ${MODEL_ANALYZER_VERSION}
 ENV NVIDIA_MODEL_ANALYZER_VERSION ${MODEL_ANALYZER_CONTAINER_VERSION}

@@ -222,10 +222,11 @@ def main():
         analyzer = Analyzer(config, metric_tags, client, server, state_manager)
 
         # Check TritonServer GPUs
-        server.start()
-        client.wait_for_server_ready(config.max_retries)
-        check_triton_and_model_analyzer_gpus(config)
-        server.stop()
+        if not(len(config.gpus) == 1 and config.gpus[0] == 'none'):
+            server.start()
+            client.wait_for_server_ready(config.max_retries)
+            check_triton_and_model_analyzer_gpus(config)
+            server.stop()
 
         if state_manager.exiting():
             return

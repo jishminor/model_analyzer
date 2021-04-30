@@ -100,6 +100,8 @@ class ModelManager:
         # Run model inferencing
         if self._config.run_config_search_disable:
             self._run_model_no_search(model)
+        elif self._config.run_config_search_cb:
+            self._run_model_with_cb_search(model)
         else:
             self._run_model_with_search(model)
 
@@ -149,6 +151,38 @@ class ModelManager:
                     for user_model_config_sweep in user_model_config_sweeps:
                         if self._state_manager.exiting():
                             return
+                        self._run_model_config_sweep(
+                            model,
+                            search_model_config=False,
+                            user_model_config_sweep=user_model_config_sweep)
+            else:
+                # Model Config parameters unspecified
+                self._run_model_config_sweep(model, search_model_config=True)
+
+    def _run_model_with_cb_search(self, model):
+        """
+        Uses contextual bandit based search methods to determine optimal model configuration
+        """
+
+        model_config_parameters = model.model_config_parameters()
+
+        # Run config search is enabled, figure out which parameters to sweep over and do sweep
+        if self._config.triton_launch_mode == 'remote':
+            self._run_model_config_sweep(model, search_model_config=False)
+        else:
+            if model_config_parameters:
+                user_model_config_sweeps = \
+                    self._run_config_generator.generate_model_config_combinations(
+                        model_config_parameters)
+                if model.parameters()['concurrency']:
+                    # Both are specified, search over neither
+                    for user_model_config_sweep in user_model_config_sweeps:
+                        self._run_config_generator.generate_run_config_for_model_sweep(
+                            model, user_model_config_sweep)
+                    self._execute_run_configs()
+                else:
+                    # Search through concurrency values only
+                    for user_model_config_sweep in user_model_config_sweeps:
                         self._run_model_config_sweep(
                             model,
                             search_model_config=False,
