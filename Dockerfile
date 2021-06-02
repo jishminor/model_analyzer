@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.04-py3
-ARG TRITONSDK_BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.04-py3-sdk
+ARG BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.05-py3
+ARG TRITONSDK_BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.05-py3-sdk
 
-ARG MODEL_ANALYZER_VERSION=1.4.0dev
-ARG MODEL_ANALYZER_CONTAINER_VERSION=21.05dev
+ARG MODEL_ANALYZER_VERSION=1.5.0dev
+ARG MODEL_ANALYZER_CONTAINER_VERSION=21.06dev
 
 FROM ${TRITONSDK_BASE_IMAGE} as sdk
 
@@ -39,10 +39,19 @@ RUN mkdir -p /opt/triton-model-analyzer
 RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/datacenter-gpu-manager_${DCGM_VERSION}_amd64.deb && \
     dpkg -i datacenter-gpu-manager_${DCGM_VERSION}_amd64.deb
 
+# Install tritonclient
+COPY --from=sdk /workspace/install/python /tmp/tritonclient
+RUN find /tmp/tritonclient -maxdepth 1 -type f -name \
+    "tritonclient-*-manylinux1_x86_64.whl" | xargs printf -- '%s[all]' | \
+    xargs pip3 install --upgrade && rm -rf /tmp/tritonclient/
+
 WORKDIR /opt/triton-model-analyzer
 RUN rm -fr *
 COPY --from=sdk /usr/local/bin/perf_analyzer .
+RUN chmod +x ./perf_analyzer
+
 COPY . .
+RUN chmod +x /opt/triton-model-analyzer/nvidia_entrypoint.sh
 RUN chmod +x build_wheel.sh && \
     ./build_wheel.sh perf_analyzer true && \
     rm -f perf_analyzer
@@ -51,6 +60,9 @@ RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install wheels/triton_model_analyzer-*-manylinux1_x86_64.whl && \
     python3 -m pip install vowpalwabbit
 
-# ENTRYPOINT []
+RUN apt-get install -y wkhtmltopdf
+
+ENTRYPOINT ["/opt/triton-model-analyzer/nvidia_entrypoint.sh"]
 ENV MODEL_ANALYZER_VERSION ${MODEL_ANALYZER_VERSION}
-ENV NVIDIA_MODEL_ANALYZER_VERSION ${MODEL_ANALYZER_CONTAINER_VERSION}
+ENV MODEL_ANALYZER_CONTAINER_VERSION ${MODEL_ANALYZER_CONTAINER_VERSION}
+

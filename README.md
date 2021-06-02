@@ -18,9 +18,11 @@ limitations under the License.
 
 # Triton Model Analyzer
 
-**NOTE: You are currently on main branch. This branch is tracking 
-development for the new version of Model Analyzer and is not currently 
-usable.**
+**LATEST RELEASE: You are currently on the main branch which tracks
+under-development progress towards the next release. The latest
+release of the Triton Model Analyzer is 1.4.0 and is available on
+branch
+[r21.05](https://github.com/triton-inference-server/model_analyzer/tree/r21.05).**
 
 Triton Model Analyzer is a CLI tool to help with better understanding of the
 compute and memory requirements of the Triton Inference Server models. These
@@ -28,19 +30,18 @@ reports will help the user better understand the trade-offs in different
 configurations and choose a configuration that maximizes the performance of
 Triton Inference Server.
 
-## Requirements
-
-Triton Model Analyzer supports all the GPUs supported by the DCGM library.
-See [DCGM Supported GPUs](https://docs.nvidia.com/datacenter/dcgm/latest/dcgm-user-guide/getting-started.html#supported-platforms)
-for more information.
-
 ## Documentation
 
+* [Installation](docs/install.md)
 * [Quick Start](docs/quick_start.md)
-* [Install](docs/install.md)
+* [Model Analyzer CLI](docs/cli.md)
 * [Launch Modes](docs/launch_modes.md)
-* [Triton Model Config Search](docs/config_search.md)
-* [Config File](docs/config.md)
+* [Model Analyzer Metrics](docs/metrics.md)
+* [Configuring Model Analyzer](docs/config.md)
+* [Model Config Search](docs/config_search.md)
+* [Checkpointing](docs/checkpoints.md)
+* [Model Analyzer Reports](docs/report.md)
+* [Deployment with Kubernetes](docs/kubernetes_deploy.md)
 
 # Reporting problems, asking questions
 

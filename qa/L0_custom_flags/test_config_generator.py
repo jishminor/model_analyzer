@@ -37,15 +37,15 @@ class TestConfigGenerator:
     def setUp(self):
         parser = argparse.ArgumentParser()
         parser.add_argument('-m',
-                            '--model-names',
+                            '--profile-models',
                             type=str,
                             required=True,
                             help='The config file for this test')
 
         args = parser.parse_args()
-        model_names = args.model_names.split(',')
+        profile_models = args.profile_models.split(',')
         self.config = {'perf_output': True}
-        self.config['model_names'] = {
+        self.config['profile_models'] = {
             model_name: {
                 'parameters': {
                     'concurrency': [1],
@@ -58,14 +58,15 @@ class TestConfigGenerator:
                     }]
                 }
             }
-            for model_name in model_names
+            for model_name in profile_models
         }
 
     def generate_perf_flags_per_model(self):
-        for i, model_name in enumerate(self.config['model_names']):
-            self.config['model_names'][model_name]['perf_analyzer_flags'] = {
-                'percentile': 95 + i
-            }
+        for i, model_name in enumerate(self.config['profile_models']):
+            self.config['profile_models'][model_name][
+                'perf_analyzer_flags'] = {
+                    'percentile': 95 + i
+                }
         with open('config-perf-per-model.yml', 'w+') as f:
             yaml.dump(self.config, f)
 
@@ -74,16 +75,24 @@ class TestConfigGenerator:
         with open('config-perf-global.yml', 'w+') as f:
             yaml.dump(self.config, f)
 
+    def generate_perf_flags_time_windows(self):
+        self.config['perf_analyzer_flags'] = {
+            'measurement-mode': 'time_windows'
+        }
+        with open('config-measurement-window.yml', 'w+') as f:
+            yaml.dump(self.config, f)
+
     def generate_triton_flags_per_model(self):
-        for i, model_name in enumerate(self.config['model_names']):
-            self.config['model_names'][model_name]['triton_server_flags'] = {
-                'exit-timeout-secs': 100 + i
-            }
+        for i, model_name in enumerate(self.config['profile_models']):
+            self.config['profile_models'][model_name][
+                'triton_server_flags'] = {
+                    'exit_timeout_secs': 100 + i
+                }
         with open('config-triton-per-model.yml', 'w+') as f:
             yaml.dump(self.config, f)
 
     def generate_triton_flags_global(self):
-        self.config['triton_server_flags'] = {'strict-model-config': False}
+        self.config['triton_server_flags'] = {'strict_model_config': False}
         with open('config-triton-global.yml', 'w+') as f:
             yaml.dump(self.config, f)
 

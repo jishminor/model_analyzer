@@ -28,6 +28,7 @@ from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
 from model_analyzer.record.types.perf_throughput import PerfThroughput
 from model_analyzer.record.types.perf_latency import PerfLatency
+from model_analyzer.constants import MAX_INTERVAL_CHANGES
 from .common import test_result_collector as trc
 
 # Test Parameters
@@ -35,7 +36,7 @@ MODEL_LOCAL_PATH = '/model_analyzer/models'
 MODEL_REPOSITORY_PATH = '/model_analyzer/models'
 PERF_BIN_PATH = 'perf_analyzer'
 TRITON_LOCAL_BIN_PATH = 'test_path'
-TRITON_VERSION = '21.04'
+TRITON_VERSION = '21.05'
 TEST_MODEL_NAME = 'test_model'
 TEST_CONCURRENCY_RANGE = '1:16:2'
 CONFIG_TEST_ARG = 'sync'
@@ -112,16 +113,13 @@ class TestPerfAnalyzerMethods(trc.TestResultCollector):
 
         # Run perf analyzer with dummy metrics to check command parsing
         perf_metrics = [id]
-        test_latency_output = "p99 latency: 5000 us\n\n\n\n"
+        test_latency_output = "Client:\n  p99 latency: 5000 us\n\n\n\n"
         self.perf_mock.set_perf_analyzer_result_string(test_latency_output)
-        perf_analyzer.run(perf_metrics)
-        self.perf_mock.assert_perf_analyzer_run_as([
-            PERF_BIN_PATH, '-m', TEST_MODEL_NAME, '--measurement-interval',
-            str(self.config['measurement-interval'])
-        ])
+        with self.assertRaises(TritonModelAnalyzerException):
+            perf_analyzer.run(perf_metrics)
 
         # Test latency parsing
-        test_latency_output = "p99 latency: 5000 us\n\n\n\n"
+        test_latency_output = "Client:\n  p99 latency: 5000 us\n\n\n\n"
         self.perf_mock.set_perf_analyzer_result_string(test_latency_output)
         perf_metrics = [PerfLatency]
         perf_analyzer.run(perf_metrics)
@@ -130,7 +128,7 @@ class TestPerfAnalyzerMethods(trc.TestResultCollector):
         self.assertEqual(records[0].value(), 5)
 
         # Test throughput parsing
-        test_throughput_output = "Throughput: 46.8 infer/sec\n\n\n\n"
+        test_throughput_output = "Client:\n  Throughput: 46.8 infer/sec\n\n\n\n"
         self.perf_mock.set_perf_analyzer_result_string(test_throughput_output)
         perf_metrics = [PerfThroughput]
         perf_analyzer.run(perf_metrics)
@@ -139,7 +137,7 @@ class TestPerfAnalyzerMethods(trc.TestResultCollector):
         self.assertEqual(records[0].value(), 46.8)
 
         # Test parsing for both
-        test_both_output = "Throughput: 0.001 infer/sec\np99 latency: 3600 us\n\n\n\n"
+        test_both_output = "Client:\n  Throughput: 0.001 infer/sec\np99 latency: 3600 us\n\n\n\n"
         self.perf_mock.set_perf_analyzer_result_string(test_both_output)
         perf_metrics = [PerfThroughput, PerfLatency]
         perf_analyzer.run(perf_metrics)
@@ -153,8 +151,61 @@ class TestPerfAnalyzerMethods(trc.TestResultCollector):
         self.assertTrue(perf_analyzer.run(perf_metrics), 1)
         self.server.stop()
 
-        # TODO: test measurement interval timeout and increase.
         # TODO: test perf_analyzer over utilization of resources.
+
+    def test_measurement_interval_increase(self):
+        server_config = TritonServerConfig()
+        server_config['model-repository'] = MODEL_REPOSITORY_PATH
+
+        # Create server, client, PerfAnalyzer, and wait for server ready
+        self.server = TritonServerFactory.create_server_local(
+            path=TRITON_LOCAL_BIN_PATH, config=server_config)
+        perf_analyzer_config = PerfAnalyzerConfig()
+        perf_analyzer_config['model-name'] = TEST_MODEL_NAME
+        perf_analyzer_config['concurrency-range'] = TEST_CONCURRENCY_RANGE
+        perf_analyzer_config['measurement-mode'] = 'time_windows'
+        perf_analyzer = PerfAnalyzer(path=PERF_BIN_PATH,
+                                     config=self.config,
+                                     timeout=100,
+                                     max_cpu_util=50)
+        self.client = TritonClientFactory.create_grpc_client(
+            server_url=TEST_GRPC_URL)
+        self.server.start()
+
+        # Test failure to stabilize for measurement windows
+        self.client.wait_for_server_ready(num_retries=1)
+        test_stabilize_output = "Please use a larger time window"
+        self.perf_mock.set_perf_analyzer_result_string(test_stabilize_output)
+        self.perf_mock.set_perf_analyzer_return_code(1)
+        perf_metrics = [PerfThroughput, PerfLatency]
+        perf_analyzer.run(perf_metrics)
+        self.assertTrue(self.perf_mock.get_perf_analyzer_popen_read_call_count(
+        ) == MAX_INTERVAL_CHANGES)
+
+    def test_measurement_request_count_increase(self):
+        server_config = TritonServerConfig()
+        server_config['model-repository'] = MODEL_REPOSITORY_PATH
+
+        # Create server, client, PerfAnalyzer, and wait for server ready
+        self.server = TritonServerFactory.create_server_local(
+            path=TRITON_LOCAL_BIN_PATH, config=server_config)
+        perf_analyzer = PerfAnalyzer(path=PERF_BIN_PATH,
+                                     config=self.config,
+                                     timeout=100,
+                                     max_cpu_util=50)
+        self.client = TritonClientFactory.create_grpc_client(
+            server_url=TEST_GRPC_URL)
+        self.server.start()
+
+        # Test the timeout for count mode
+        self.client.wait_for_server_ready(num_retries=1)
+        test_both_output = "Please use a larger time window"
+        self.perf_mock.set_perf_analyzer_result_string(test_both_output)
+        self.perf_mock.set_perf_analyzer_return_code(1)
+        perf_metrics = [PerfThroughput, PerfLatency]
+        perf_analyzer.run(perf_metrics)
+        self.assertTrue(self.perf_mock.get_perf_analyzer_popen_read_call_count(
+        ) == MAX_INTERVAL_CHANGES)
 
     def tearDown(self):
         # In case test raises exception

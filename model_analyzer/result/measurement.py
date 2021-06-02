@@ -24,6 +24,7 @@ class Measurement:
     Encapsulates the set of metrics obtained from a single
     perf_analyzer run
     """
+
     def __init__(self, gpu_data, non_gpu_data, perf_config):
         """
         gpu_data : dict of list of Records
@@ -43,12 +44,10 @@ class Measurement:
         self._perf_config = perf_config
 
         self._gpu_data_from_tag = {
-            type(metric).tag: metric
-            for metric in self._avg_gpu_data
+            type(metric).tag: metric for metric in self._avg_gpu_data
         }
         self._non_gpu_data_from_tag = {
-            type(metric).tag: metric
-            for metric in self._non_gpu_data
+            type(metric).tag: metric for metric in self._non_gpu_data
         }
         print(self._gpu_data_from_tag)
         print(self._non_gpu_data_from_tag)
@@ -112,10 +111,10 @@ class Measurement:
             the tag, in this measurement
         """
 
-        if tag in self._gpu_data_from_tag:
-            return self._gpu_data_from_tag[tag]
-        elif tag in self._non_gpu_data_from_tag:
+        if tag in self._non_gpu_data_from_tag:
             return self._non_gpu_data_from_tag[tag]
+        elif tag in self._gpu_data_from_tag:
+            return self._gpu_data_from_tag[tag]
         else:
             raise TritonModelAnalyzerException(
                 f"No metric corresponding to tag {tag}"

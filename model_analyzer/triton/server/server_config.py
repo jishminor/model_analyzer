@@ -78,6 +78,20 @@ class TritonServerConfig:
 
         self._server_args = {k: None for k in self.server_arg_keys}
 
+    @classmethod
+    def allowed_keys(cls):
+        """
+        Returns
+        -------
+        list of str
+            The keys that can be used to configure tritonserver instance
+        """
+
+        snake_cased_keys = [
+            key.replace('-', '_') for key in cls.server_arg_keys
+        ]
+        return cls.server_arg_keys + snake_cased_keys
+
     def update_config(self, params=None):
         """
         Allows setting values from a
@@ -91,7 +105,7 @@ class TritonServerConfig:
 
         if params:
             for key in params:
-                self[key] = params[key]
+                self[key.strip().replace('_', '-')] = params[key]
 
     def to_cli_string(self):
         """
@@ -124,7 +138,7 @@ class TritonServerConfig:
             The value that the argument is set to in this config
         """
 
-        return self._server_args[key]
+        return self._server_args[key.strip().replace('_', '-')]
 
     def __setitem__(self, key, value):
         """
@@ -145,8 +159,9 @@ class TritonServerConfig:
             config class
         """
 
-        if key in self._server_args:
-            self._server_args[key] = value
+        kebab_cased_key = key.strip().replace('_', '-')
+        if kebab_cased_key in self._server_args:
+            self._server_args[kebab_cased_key] = value
         else:
             raise TritonModelAnalyzerException(
                 f"The argument '{key}' to the Triton Inference "

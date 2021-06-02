@@ -18,11 +18,14 @@ import model_analyzer.monitor.dcgm.dcgm_agent as dcgm_agent
 import model_analyzer.monitor.dcgm.dcgm_structs as structs
 from model_analyzer.model_analyzer_exceptions import TritonModelAnalyzerException
 
+import logging
+
 
 class GPUDeviceFactory:
     """
     Factory class for creating GPUDevices
     """
+
     @staticmethod
     def create_device_by_bus_id(bus_id, dcgmPath=None):
         """

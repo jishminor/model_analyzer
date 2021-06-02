@@ -17,35 +17,40 @@ source ../common/util.sh
 
 rm -f *.log
 rm -rf results && mkdir -p results
-python3 config_generator.py
-
 
 # Set test parameters
 MODEL_ANALYZER="`which model-analyzer`"
-MODEL_REPOSITORY=${MODEL_REPOSITORY:="/mnt/dldata/inferenceserver/model_analyzer_clara_pipelines"}
+QA_MODELS="resnet50_libtorch"
+MODEL_NAMES="$(echo $QA_MODELS | sed 's/ /,/g')"
+REPO_VERSION=${NVIDIA_TRITON_SERVER_VERSION}
+MODEL_REPOSITORY=${MODEL_REPOSITORY:="/mnt/dldata/inferenceserver/$REPO_VERSION/libtorch_model_store"}
 EXPORT_PATH="`pwd`/results"
 FILENAME_SERVER_ONLY="server-metrics.csv"
 FILENAME_INFERENCE_MODEL="model-metrics-inference.csv"
 FILENAME_GPU_MODEL="model-metrics-gpu.csv"
-TRITON_LAUNCH_MODE="docker"
+TRITON_LAUNCH_MODE="local"
 CLIENT_PROTOCOL="grpc"
 PORTS=(`find_available_ports 3`)
 GPUS=(`get_all_gpus_uuids`)
 OUTPUT_MODEL_REPOSITORY=${OUTPUT_MODEL_REPOSITORY:=`get_output_directory`}
+CHECKPOINT_DIRECTORY="`pwd`/checkpoints"
 
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS --model-repository $MODEL_REPOSITORY"
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS --client-protocol=$CLIENT_PROTOCOL --triton-launch-mode=$TRITON_LAUNCH_MODE"
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS -e $EXPORT_PATH --filename-server-only=$FILENAME_SERVER_ONLY"
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS --filename-model-inference=$FILENAME_INFERENCE_MODEL --filename-model-gpu=$FILENAME_GPU_MODEL"
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS --triton-http-endpoint localhost:${PORTS[0]} --triton-grpc-endpoint localhost:${PORTS[1]}"
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS --triton-metrics-url http://localhost:${PORTS[2]}/metrics"
-MODEL_ANALYZER_BASE_ARGS="$MODEL_ANALYZER_BASE_ARGS --output-model-repository-path $OUTPUT_MODEL_REPOSITORY --override-output-model-repository"
+MODEL_ANALYZER_PROFILE_BASE_ARGS="--model-repository $MODEL_REPOSITORY --checkpoint-directory $CHECKPOINT_DIRECTORY"
+MODEL_ANALYZER_PROFILE_BASE_ARGS="$MODEL_ANALYZER_PROFILE_BASE_ARGS --client-protocol=$CLIENT_PROTOCOL --triton-launch-mode=$TRITON_LAUNCH_MODE"
+MODEL_ANALYZER_PROFILE_BASE_ARGS="$MODEL_ANALYZER_PROFILE_BASE_ARGS --triton-http-endpoint localhost:${PORTS[0]} --triton-grpc-endpoint localhost:${PORTS[1]}"
+MODEL_ANALYZER_PROFILE_BASE_ARGS="$MODEL_ANALYZER_PROFILE_BASE_ARGS --triton-metrics-url http://localhost:${PORTS[2]}/metrics"
+MODEL_ANALYZER_PROFILE_BASE_ARGS="$MODEL_ANALYZER_PROFILE_BASE_ARGS --output-model-repository-path $OUTPUT_MODEL_REPOSITORY --override-output-model-repository"
+
+MODEL_ANALYZER_ANALYZE_BASE_ARGS="--analysis-models $MODEL_NAMES -e $EXPORT_PATH --filename-server-only=$FILENAME_SERVER_ONLY --checkpoint-directory $CHECKPOINT_DIRECTORY"
+MODEL_ANALYZER_ANALYZE_BASE_ARGS="$MODEL_ANALYZER_ANALYZE_BASE_ARGS --filename-model-inference=$FILENAME_INFERENCE_MODEL --filename-model-gpu=$FILENAME_GPU_MODEL"
+
+python3 config_generator.py -m $MODEL_NAMES
 
 LIST_OF_CONFIG_FILES=(`ls | grep .yml`)
 
 RET=0
 
-if [ ${#LIST_OF_CONFIG_FILES[@]} -lt 0 ]; then
+if [ ${#LIST_OF_CONFIG_FILES[@]} -le 0 ]; then
     echo -e "\n***\n*** Test Failed. No config file exists. \n***"
     RET=1
     exit $RET
@@ -57,12 +62,21 @@ for config in ${LIST_OF_CONFIG_FILES[@]}; do
     set +e
 
     ANALYZER_LOG=analyzer.${config}.log
-    MODEL_ANALYZER_ARGS="$MODEL_ANALYZER_BASE_ARGS -f $config"
+    MODEL_ANALYZER_ARGS="$MODEL_ANALYZER_PROFILE_BASE_ARGS -f $config"
     NUM_ROW_OUTPUT_FILE=`echo $config | sed 's/\.yml/\.txt/'`
     TEST_OUTPUT_NUM_ROWS=`cat $NUM_ROW_OUTPUT_FILE`
+    MODEL_ANALYZER_SUBCOMMAND="profile" 
     run_analyzer
     if [ $? -ne 0 ]; then
-        echo -e "\n***\n*** Test Failed. model-analyzer exited with non-zero exit code. \n***"
+        echo -e "\n***\n*** Test Failed. model-analyzer $MODEL_ANALYZER_SUBCOMMAND exited with non-zero exit code. \n***"
+        cat $ANALYZER_LOG
+        RET=1
+    fi
+    MODEL_ANALYZER_ARGS="$MODEL_ANALYZER_ANALYZE_BASE_ARGS"
+    MODEL_ANALYZER_SUBCOMMAND="analyze"
+    run_analyzer
+    if [ $? -ne 0 ]; then
+        echo -e "\n***\n*** Test Failed. model-analyzer $MODEL_ANALYZER_SUBCOMMAND exited with non-zero exit code. \n***"
         cat $ANALYZER_LOG
         RET=1
     else

@@ -18,12 +18,13 @@ class ConstraintManager:
     Handles processing and applying
     constraints on a given measurements
     """
+
     @staticmethod
     def get_constraints_for_all_models(config):
         """
         Parameters
         ----------
-        config : AnalyzerConfig
+        config :ConfigCommandProfile
             The model analyzer config
 
         Returns
@@ -33,7 +34,7 @@ class ConstraintManager:
         """
 
         constraints = {}
-        for model in config.model_names:
+        for model in config.analysis_models:
             constraints[model.model_name()] = model.constraints()
         if "constraints" in config.get_all_config():
             constraints["default"] = config.get_all_config()["constraints"]

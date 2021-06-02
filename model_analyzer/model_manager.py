@@ -13,17 +13,12 @@
 # limitations under the License.
 
 from model_analyzer.output.file_writer import FileWriter
-from model_analyzer.result.measurement import Measurement
-from model_analyzer.device.gpu_device_factory import GPUDeviceFactory
 from model_analyzer.config.run.run_search import RunSearch
 from model_analyzer.config.run.run_config_generator \
     import RunConfigGenerator
-from model_analyzer.model_analyzer_exceptions \
-    import TritonModelAnalyzerException
 
 import logging
 import os
-import shutil
 
 
 class ModelManager:
@@ -31,12 +26,13 @@ class ModelManager:
     This class handles the search for, creation of, and execution of run configs.
     It also records the best results for each model.
     """
+
     def __init__(self, config, client, server, metrics_manager, result_manager,
                  state_manager):
         """
         Parameters
         ----------
-        config: AnalyzerConfig
+        config:ConfigCommandProfile
             The config for the model analyzer
         client: TritonClient
             The client handle used to send requests to Triton
@@ -56,29 +52,13 @@ class ModelManager:
         self._metrics_manager = metrics_manager
         self._result_manager = result_manager
         self._state_manager = state_manager
-        self._is_cpu_only = config.cpu_only
-        self._run_search = RunSearch(config=config, cpu_only=self._is_cpu_only)
+        self._run_search = RunSearch(config=config)
         self._last_config_variant = None
         self._run_config_generator = RunConfigGenerator(config=config,
                                                         client=self._client)
 
         # Generate the output model repository path folder.
         self._output_model_repo_path = config.output_model_repository_path
-        try:
-            os.mkdir(self._output_model_repo_path)
-        except OSError:
-            if not config.override_output_model_repository:
-                raise TritonModelAnalyzerException(
-                    f'Path "{self._output_model_repo_path}" already exists. '
-                    'Please set or modify "--output-model-repository-path" flag or remove this directory.'
-                    ' You can also allow overriding of the output directory using'
-                    ' the "--override-output-model-repository" flag.')
-            else:
-                shutil.rmtree(self._output_model_repo_path)
-                logging.warn(
-                    f'Overriding the output model repo path "{self._output_model_repo_path}"...'
-                )
-                os.mkdir(self._output_model_repo_path)
 
     def run_model(self, model):
         """
@@ -87,7 +67,7 @@ class ModelManager:
 
         Parameters
         ----------
-        model : ConfigModel
+        model : ConfigModelProfileSpec
             The model being run
         """
 
@@ -250,6 +230,10 @@ class ModelManager:
             if not self._create_and_load_model_variant(
                     original_name=run_config.model_name(),
                     variant_config=run_config.model_config()):
+                self._server.stop()
+                if self._config.triton_output_path:
+                    self._server.write_server_logs(
+                        self._config.triton_output_path)
                 continue
 
             # Profile various batch size and concurrency values.

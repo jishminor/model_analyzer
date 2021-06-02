@@ -20,11 +20,11 @@ import sys
 class TestOutputValidator:
     """
     Functions that validate the output
-    of the L0_results test
+    of the test
     """
-    def __init__(self, config, model_names, analyzer_log, triton_log):
+    def __init__(self, config, profile_models, analyzer_log, triton_log):
         self._config = config
-        self._model_names = model_names.split(',')
+        self._profile_models = profile_models.split(',')
         self._analyzer_log = analyzer_log
         self._triton_log = triton_log
 
@@ -52,7 +52,7 @@ class TestOutputValidator:
         True if test passes else False
         """
 
-        if 'perf_analyzer_flags' in self._config:
+        if 'perf_analyzer_flags' in self._config and 'percentile' in self._config['perf_analyzer_flags']:
             with open(self._analyzer_log, 'r') as f:
                 contents = f.read()
 
@@ -62,13 +62,37 @@ class TestOutputValidator:
 
             # Ensure the token appears the correct number of times in the output contents
             next_token_idx = 0
-            for model_name in self._model_names:
+            for profile_model in self._profile_models:
                 next_token_idx = contents.find(token, next_token_idx)
                 if next_token_idx == -1:
                     print(
                         f"\n***\n***  Perf Analyzer not stabilizing on p{percentile} latency"
-                        f"for {model_name}. \n***")
+                        f"for {profile_model}. \n***")
                     return False
+        return True
+
+    def check_perf_mode_time_window(self):
+        """
+        Checks if the time_window mode can be applied properly
+
+        Returns
+        -------
+        True if test passes else False
+        """
+
+        if 'perf_analyzer_flags' in self._config and 'measurement-mode' in self._config['perf_analyzer_flags']:
+            with open(self._analyzer_log, 'r') as f:
+                contents = f.read()
+
+            # In contents, search for "stabilizing with px latency"
+            measurement_mode = self._config['perf_analyzer_flags']['measurement-mode']
+            assert(measurement_mode == 'time_windows')
+            token = "time_windows"
+
+            # Ensure the token appears in the text
+            token_idx = contents.find(token)
+            if token_idx == -1:
+                return False
         return True
 
     def check_perf_per_model(self):
@@ -81,7 +105,8 @@ class TestOutputValidator:
         True if test passes else False
         """
 
-        for model_name, config_model in self._config['model_names'].items():
+        for profile_model, config_model in self._config[
+                'profile_models'].items():
             if 'perf_analyzer_flags' in config_model:
                 with open(self._analyzer_log, 'r') as f:
                     contents = f.read()
@@ -92,7 +117,7 @@ class TestOutputValidator:
                 if contents.find(token) == -1:
                     print(
                         f"\n***\n***  Perf Analyzer not stabilizing on p{percentile} latency"
-                        f"for {model_name}. \n***")
+                        f"for {profile_model}. \n***")
                     return False
         return True
 
@@ -112,12 +137,12 @@ class TestOutputValidator:
 
             # Look for strict-model-config false
             next_token_idx = 0
-            for model_name in self._config['model_names']:
+            for profile_model in self._config['profile_models']:
                 next_token_idx = contents.find('strict_model_config',
                                                next_token_idx)
                 if next_token_idx == -1:
                     print(
-                        f"\n***\n*** strict-model-config for model {model_name} not found in Triton log.\n***"
+                        f"\n***\n*** strict-model-config for model {profile_model} not found in Triton log.\n***"
                     )
                     return False
                 line = contents[contents[:next_token_idx].rfind('\n'):contents.
@@ -125,9 +150,9 @@ class TestOutputValidator:
                 strict_model_config_val = bool(
                     int(line.replace(' ', '').split('|')[2]))
                 if strict_model_config_val != self._config[
-                        'triton_server_flags']['strict-model-config']:
+                        'triton_server_flags']['strict_model_config']:
                     print(
-                        f"\n***\n*** strict-model-config value does not match for model {model_name}.\n***"
+                        f"\n***\n*** strict-model-config value does not match for model {profile_model}.\n***"
                     )
                     return False
         return True
@@ -149,7 +174,7 @@ class TestOutputValidator:
 
             # Get all the exit_timeout values from config
             timeouts_from_config = []
-            for config_model in self._config['model_names']:
+            for config_model in self._config['profile_models']:
                 if 'triton_server_flags' in config_model:
                     timeouts_from_config.append(
                         config_model['triton_server_flags'])
@@ -159,11 +184,11 @@ class TestOutputValidator:
             # Get all the exit_timeout tokens from the logs
             timeouts_from_log = []
             next_token_idx = 0
-            for model_name in self._model_names:
+            for profile_model in self._profile_models:
                 next_token_idx = contents.find('exit_timeout', next_token_idx)
                 if next_token_idx == -1:
                     print(
-                        f"\n***\n*** Timeout for model {model_name} not found in Triton log.\n***"
+                        f"\n***\n*** Timeout for model {profile_model} not found in Triton log.\n***"
                     )
                     return False
                 line = contents[contents[:next_token_idx].rfind('\n'):contents.
@@ -189,7 +214,7 @@ if __name__ == '__main__':
                         required=True,
                         help='The config file for this test')
     parser.add_argument('-m',
-                        '--model-names',
+                        '--profile-models',
                         type=str,
                         required=True,
                         help='The models being used for this test')
@@ -206,5 +231,5 @@ if __name__ == '__main__':
     with open(args.config_file, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    TestOutputValidator(config, args.model_names, args.analyzer_log_file,
+    TestOutputValidator(config, args.profile_models, args.analyzer_log_file,
                         args.triton_log_file)

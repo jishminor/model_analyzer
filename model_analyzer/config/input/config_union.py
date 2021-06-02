@@ -69,9 +69,10 @@ class ConfigUnion(ConfigValue):
                 self._used_type_index = i
                 return super().set_value(type_)
         else:
-            message = (f'Value "{value}" cannot be set for field "{self.name()}".'
-            ' This field allows multiple types of values.'
-            ' You only need to fix one of the errors below:\n')
+            message = (
+                f'Value "{value}" cannot be set for field "{self.name()}".'
+                ' This field allows multiple types of values.'
+                ' You only need to fix one of the errors below:\n')
             for config_status in config_statuses:
                 message_lines = config_status.message().split('\n')
 
