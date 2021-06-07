@@ -49,8 +49,6 @@ class Measurement:
         self._non_gpu_data_from_tag = {
             type(metric).tag: metric for metric in self._non_gpu_data
         }
-        print(self._gpu_data_from_tag)
-        print(self._non_gpu_data_from_tag)
 
     def set_result_comparator(self, comparator):
         """

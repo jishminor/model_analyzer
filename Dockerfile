@@ -31,7 +31,7 @@ ENV DCGM_VERSION=2.0.13
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y python3-dev wkhtmltopdf python3-pdfkit libboost-dev libboost-python-dev libboost-thread-dev libboost-program-options-dev libboost-system-dev libboost-math-dev libboost-test-dev zlib1g-dev cmake g++
+    apt-get install -y python3-dev python3-pdfkit libboost-dev libboost-python-dev libboost-thread-dev libboost-program-options-dev libboost-system-dev libboost-math-dev libboost-test-dev zlib1g-dev cmake g++
 
 RUN mkdir -p /opt/triton-model-analyzer
 
