@@ -18,9 +18,10 @@ from model_analyzer.state.analyzer_state import AnalyzerState
 from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
+import traceback
 import signal
 import logging
-import pickle
+import json
 import os
 import glob
 
@@ -29,7 +30,6 @@ class AnalyzerStateManager:
     """
     Maintains the state of the Model Analyzer
     """
-
     def __init__(self, config):
         self._config = config
         self._exiting = 0
@@ -42,6 +42,9 @@ class AnalyzerStateManager:
             os.makedirs(self._checkpoint_dir)
             self._checkpoint_index = 0
         signal.signal(signal.SIGINT, self.interrupt_handler)
+
+        self._current_state = AnalyzerState()
+        self._starting_fresh_run = True
 
     def starting_fresh_run(self):
         """
@@ -103,20 +106,26 @@ class AnalyzerStateManager:
         if os.path.exists(latest_checkpoint_file):
             logging.info(
                 f"Loaded checkpoint from file {latest_checkpoint_file}")
-            with open(latest_checkpoint_file, 'rb') as f:
+            with open(latest_checkpoint_file, 'r') as f:
                 try:
-                    state = pickle.load(f)
+
+                    self._current_state = AnalyzerState.from_dict(json.load(f))
                 except EOFError:
                     raise TritonModelAnalyzerException(
                         f'Checkpoint file {latest_checkpoint_file} is'
                         ' empty or corrupted. Remove it from checkpoint'
                         ' directory.')
-            self._current_state = state
             self._starting_fresh_run = False
         else:
-            self._current_state = AnalyzerState()
-            self._starting_fresh_run = True
             logging.info("No checkpoint file found, starting a fresh run.")
+
+    def default_encode(self, obj):
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8')
+        elif hasattr(obj, 'to_dict'):
+            return obj.to_dict()
+        else:
+            return obj.__dict__
 
     def save_checkpoint(self):
         """
@@ -132,8 +141,8 @@ class AnalyzerStateManager:
         ckpt_filename = os.path.join(self._checkpoint_dir,
                                      f"{self._checkpoint_index}.ckpt")
         if self._state_changed:
-            with open(ckpt_filename, 'wb') as f:
-                pickle.dump(self._current_state, f)
+            with open(ckpt_filename, 'w') as f:
+                json.dump(self._current_state, f, default=self.default_encode)
             logging.info(f"Saved checkpoint to {ckpt_filename}.")
 
             self._checkpoint_index += 1
@@ -150,6 +159,8 @@ class AnalyzerStateManager:
         """
 
         self._exiting += 1
+        if logging.root.level <= logging.DEBUG:
+            traceback.print_stack(limit=15)
         logging.info(
             f'Received SIGINT {self._exiting}/{MAX_NUMBER_OF_INTERRUPTS}. '
             'Will attempt to exit after current measurement.')
@@ -172,7 +183,8 @@ class AnalyzerStateManager:
             return -1
         try:
             return max([
-                int(os.path.split(f)[1].split('.')[0]) for f in checkpoint_files
+                int(os.path.split(f)[1].split('.')[0])
+                for f in checkpoint_files
             ])
         except Exception as e:
             raise TritonModelAnalyzerException(e)

@@ -13,9 +13,10 @@
 # limitations under the License.
 
 from functools import total_ordering
+import logging
+from model_analyzer.perf_analyzer.perf_config import PerfAnalyzerConfig
 
-from model_analyzer.model_analyzer_exceptions \
-    import TritonModelAnalyzerException
+from model_analyzer.record.record import RecordType
 
 
 @total_ordering
@@ -24,14 +25,13 @@ class Measurement:
     Encapsulates the set of metrics obtained from a single
     perf_analyzer run
     """
-
     def __init__(self, gpu_data, non_gpu_data, perf_config):
         """
         gpu_data : dict of list of Records
-            These are the values from the monitors that have a GPU ID
+            These are the values from the monitors that have a GPU UUID
             associated with them
         non_gpu_data : list of Records
-            These do not have a GPU ID associated with them
+            These do not have a GPU UUID associated with them
         perf_config : PerfAnalyzerConfig
             The perf config that was used for the perf run that generated
             this data data
@@ -39,16 +39,56 @@ class Measurement:
 
         # average values over all GPUs
         self._gpu_data = gpu_data
-        self._avg_gpu_data = self._average_list(list(self._gpu_data.values()))
         self._non_gpu_data = non_gpu_data
         self._perf_config = perf_config
 
+        self._avg_gpu_data = self._average_list(list(self._gpu_data.values()))
         self._gpu_data_from_tag = {
-            type(metric).tag: metric for metric in self._avg_gpu_data
+            type(metric).tag: metric
+            for metric in self._avg_gpu_data
         }
         self._non_gpu_data_from_tag = {
-            type(metric).tag: metric for metric in self._non_gpu_data
+            type(metric).tag: metric
+            for metric in self._non_gpu_data
         }
+
+    @classmethod
+    def from_dict(cls, measurement_dict):
+        measurement = Measurement({}, [], None)
+
+        # Deserialize gpu_data
+        for gpu_uuid, gpu_data_list in measurement_dict['_gpu_data'].items():
+            metric_list = []
+            for [tag, record_dict] in gpu_data_list:
+                record_type = RecordType.get(tag)
+                record = record_type.from_dict(record_dict)
+                metric_list.append(record)
+            measurement._gpu_data[gpu_uuid] = metric_list
+
+        # non gpu data
+        measurement._non_gpu_data = []
+        for [tag, record_dict] in measurement_dict['_non_gpu_data']:
+            record_type = RecordType.get(tag)
+            record = record_type.from_dict(record_dict)
+            measurement._non_gpu_data.append(record)
+
+        # perf config
+        measurement._perf_config = PerfAnalyzerConfig.from_dict(
+            measurement_dict['_perf_config'])
+
+        # Compute contigent data structures
+        measurement._avg_gpu_data = measurement._average_list(
+            list(measurement._gpu_data.values()))
+        measurement._gpu_data_from_tag = {
+            type(metric).tag: metric
+            for metric in measurement._avg_gpu_data
+        }
+        measurement._non_gpu_data_from_tag = {
+            type(metric).tag: metric
+            for metric in measurement._non_gpu_data
+        }
+
+        return measurement
 
     def set_result_comparator(self, comparator):
         """
@@ -74,14 +114,14 @@ class Measurement:
 
     def gpu_data(self):
         """
-        Returns the GPU ID specific measurement
+        Returns the GPU specific measurement
         """
 
         return self._gpu_data
 
     def non_gpu_data(self):
         """
-        Returns the non GPU ID specific measurement
+        Returns the non GPU specific measurement
         """
 
         return self._non_gpu_data
@@ -106,7 +146,8 @@ class Measurement:
         -------
         Record
             metric Record corresponding to
-            the tag, in this measurement
+            the tag, in this measurement, None
+            if tag not found.
         """
 
         if tag in self._non_gpu_data_from_tag:
@@ -114,9 +155,34 @@ class Measurement:
         elif tag in self._gpu_data_from_tag:
             return self._gpu_data_from_tag[tag]
         else:
-            raise TritonModelAnalyzerException(
-                f"No metric corresponding to tag {tag}"
-                " found in measurement")
+            logging.warning(f"No metric corresponding to tag '{tag}' "
+                            "found in measurement. Possibly comparing "
+                            "measurements across devices.")
+            return None
+
+    def get_parameter(self, tag):
+        """
+        Parameters
+        ----------
+        tag : str
+            A human readable tag that corresponds
+            to a particular parameter
+
+        Returns
+        -------
+        value
+            metric Record value corresponding to
+            the tag, in this measurement, None
+            if tag not found
+        """
+
+        if tag.replace('_', '-') in self.perf_config():
+            return self.perf_config()[tag.replace('_', '-')]
+        else:
+            logging.warning(f"No parameter corresponding to tag '{tag}' "
+                            "found in measurement. Possibly comparing "
+                            "measurements across devices.")
+            return None
 
     def gpus_used(self):
         """

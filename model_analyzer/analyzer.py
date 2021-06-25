@@ -35,7 +35,6 @@ class Analyzer:
     model_analyzer. Configured with metrics to monitor, exposes profiling and
     result writing methods.
     """
-
     def __init__(self, config, server, state_manager):
         """
         Parameters
@@ -55,8 +54,6 @@ class Analyzer:
 
         self._result_manager = ResultManager(config=config,
                                              state_manager=self._state_manager)
-        self._metrics_manager = MetricsManager(
-            config=config, server=server, result_manager=self._result_manager)
 
     def profile(self, client):
         """
@@ -81,6 +78,13 @@ class Analyzer:
                 " got {type(self._config)}.")
 
         logging.info('Profiling server only metrics...')
+
+        self._metrics_manager = MetricsManager(
+            config=self._config,
+            client=client,
+            server=self._server,
+            result_manager=self._result_manager,
+            state_manager=self._state_manager)
 
         self._model_manager = ModelManager(
             config=self._config,
@@ -112,12 +116,17 @@ class Analyzer:
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 
-    def analyze(self):
+    def analyze(self, mode):
         """
         subcommand: ANALYZE
 
         Constructs results from measurements,
         sorts them, and dumps them to tables.
+
+        Parameters
+        ----------
+        mode : str
+            Global mode that the analyzer is running on
         """
 
         if not isinstance(self._config, ConfigCommandAnalyze):
@@ -125,11 +134,22 @@ class Analyzer:
                 f"Expected config of type {ConfigCommandAnalyze}, got {type(self._config)}."
             )
 
+        gpu_info = self._state_manager.get_state_variable(
+            'MetricsManager.gpus')
+        if not gpu_info:
+            gpu_info = {}
         self._report_manager = ReportManager(
-            config=self._config, result_manager=self._result_manager)
+            mode=mode,
+            config=self._config,
+            gpu_info=gpu_info,
+            result_manager=self._result_manager)
 
         # Create result tables, put top results and get stats
-        self._metrics_manager.create_metric_tables()
+        dcgm_metrics, perf_metrics, cpu_metrics = \
+            MetricsManager.categorize_metrics()
+        self._result_manager.create_tables(
+            gpu_specific_metrics=dcgm_metrics,
+            non_gpu_specific_metrics=perf_metrics + cpu_metrics)
         self._result_manager.compile_and_sort_results()
         if self._config.summarize:
             self._report_manager.create_summaries()
@@ -139,12 +159,17 @@ class Analyzer:
         self._result_manager.tabulate_results()
         self._result_manager.write_and_export_results()
 
-    def report(self):
+    def report(self, mode):
         """
         Subcommand: REPORT
 
         Generates detailed information on
         one or more model configs
+
+        Parameters
+        ----------
+        mode : str
+            Global mode that the analyzer is running on
         """
 
         if not isinstance(self._config, ConfigCommandReport):
@@ -152,8 +177,15 @@ class Analyzer:
                 f"Expected config of type {ConfigCommandReport}, got {type(self._config)}."
             )
 
+        gpu_info = self._state_manager.get_state_variable(
+            'MetricsManager.gpus')
+        if not gpu_info:
+            gpu_info = {}
         self._report_manager = ReportManager(
-            config=self._config, result_manager=self._result_manager)
+            mode=mode,
+            config=self._config,
+            result_manager=self._result_manager,
+            gpu_info=gpu_info)
 
         self._report_manager.create_detailed_reports()
         self._report_manager.export_detailed_reports()

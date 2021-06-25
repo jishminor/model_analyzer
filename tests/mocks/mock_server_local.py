@@ -14,6 +14,7 @@
 
 from .mock_server import MockServerMethods
 from unittest.mock import patch, Mock, MagicMock
+import os
 
 
 class MockServerLocalMethods(MockServerMethods):
@@ -22,7 +23,6 @@ class MockServerLocalMethods(MockServerMethods):
     model_analyzer/triton/server/server_local.py.
     Provides functions to check operation.
     """
-
     def __init__(self):
         memory_full_attrs = {'uss': 0}
         virtual_memory_attrs = {'available': 0}
@@ -43,7 +43,7 @@ class MockServerLocalMethods(MockServerMethods):
         self.patcher_stdout = patch(
             'model_analyzer.triton.server.server_local.STDOUT', MagicMock())
         self.patcher_pipe = patch(
-            'model_analyzer.triton.server.server_local.PIPE', MagicMock())
+            'model_analyzer.triton.server.server_local.DEVNULL', MagicMock())
         self.patcher_psutil = patch(
             'model_analyzer.triton.server.server_local.psutil',
             Mock(**psutil_attrs))
@@ -79,7 +79,8 @@ class MockServerLocalMethods(MockServerMethods):
                                                 stdout=self.pipe_mock,
                                                 stderr=self.stdout_mock,
                                                 start_new_session=True,
-                                                universal_newlines=True)
+                                                universal_newlines=True,
+                                                env=os.environ.copy())
 
     def assert_server_process_terminate_called(self):
         """

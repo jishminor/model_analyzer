@@ -17,7 +17,8 @@
 #
 
 DEFAULT_CHECKPOINT_DIRECTORY = './checkpoints'
-DEFAULT_OBJECTIVES = {'perf_throughput': 10}
+DEFAULT_ONLINE_OBJECTIVES = {'perf_latency': 10}
+DEFAULT_OFFLINE_OBJECTIVES = {'perf_throughput': 10}
 
 #
 # Profile Config defaults
@@ -37,7 +38,7 @@ DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT = 5
 DEFAULT_RUN_CONFIG_SEARCH_DISABLE = False
 DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE = 16
 DEFAULT_TRITON_LAUNCH_MODE = 'local'
-DEFAULT_TRITON_DOCKER_IMAGE = 'nvcr.io/nvidia/tritonserver:21.03-py3'
+DEFAULT_TRITON_DOCKER_IMAGE = 'nvcr.io/nvidia/tritonserver:21.05-py3'
 DEFAULT_TRITON_HTTP_ENDPOINT = 'localhost:8000'
 DEFAULT_TRITON_GRPC_ENDPOINT = 'localhost:8001'
 DEFAULT_TRITON_METRICS_URL = 'http://localhost:8002/metrics'
@@ -51,7 +52,7 @@ DEFAULT_PERF_OUTPUT_FLAG = False
 # Analyze Config defaults
 #
 
-DEFAULT_ANALYSIS_PLOTS = {
+DEFAULT_ONLINE_ANALYSIS_PLOTS = {
     'throughput_v_latency': {
         'title': 'Throughput vs. Latency',
         'x_axis': 'perf_latency',
@@ -62,6 +63,15 @@ DEFAULT_ANALYSIS_PLOTS = {
         'title': 'GPU Memory vs. Latency',
         'x_axis': 'perf_latency',
         'y_axis': 'gpu_used_memory',
+        'monotonic': False
+    }
+}
+
+DEFAULT_OFFLINE_ANALYSIS_PLOTS = {
+    'through_v_batch_size': {
+        'title': 'Throughput vs. Batch Size',
+        'x_axis': 'batch_size',
+        'y_axis': 'perf_throughput',
         'monotonic': False
     }
 }
@@ -86,12 +96,12 @@ DEFAULT_INFERENCE_OUTPUT_FIELDS = [
     'perf_throughput', 'perf_latency', 'cpu_used_ram'
 ]
 DEFAULT_GPU_OUTPUT_FIELDS = [
-    'model_name', 'gpu_id', 'batch_size', 'concurrency', 'model_config_path',
+    'model_name', 'gpu_uuid', 'batch_size', 'concurrency', 'model_config_path',
     'instance_group', 'dynamic_batch_sizes', 'satisfies_constraints',
     'gpu_used_memory', 'gpu_utilization', 'gpu_power_usage'
 ]
 DEFAULT_SERVER_OUTPUT_FIELDS = [
-    'model_name', 'gpu_id', 'gpu_used_memory', 'gpu_utilization',
+    'model_name', 'gpu_uuid', 'gpu_used_memory', 'gpu_utilization',
     'gpu_power_usage'
 ]
 
@@ -105,7 +115,7 @@ DEFAULT_NUM_TOP_MODEL_CONFIGS = 0
 
 DEFAULT_REPORT_FORMAT = 'pdf'
 
-DEFAULT_REPORT_PLOTS = {
+DEFAULT_ONLINE_REPORT_PLOTS = {
     'gpu_mem_v_latency': {
         'title': 'GPU Memory vs. Latency',
         'x_axis': 'perf_latency',
@@ -128,6 +138,21 @@ DEFAULT_REPORT_PLOTS = {
         'title': 'GPU Power vs. Latency',
         'x_axis': 'perf_latency',
         'y_axis': 'gpu_power_usage',
+        'monotonic': False
+    }
+}
+
+DEFAULT_OFFLINE_REPORT_PLOTS = {
+    'throughput_v_batch_size': {
+        'title': 'Throughput vs. Batch Size',
+        'x_axis': 'batch_size',
+        'y_axis': 'perf_throughput',
+        'monotonic': False
+    },
+    'latency_v_batch_size': {
+        'title': 'p99 Latency vs. Batch Size',
+        'x_axis': 'batch_size',
+        'y_axis': 'perf_latency',
         'monotonic': False
     }
 }

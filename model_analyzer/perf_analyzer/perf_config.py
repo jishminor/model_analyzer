@@ -79,8 +79,7 @@ class PerfAnalyzerConfig:
             passed into perf_analyzer
         """
 
-        return list(cls.perf_analyzer_args) + list(
-            cls.input_to_options) + list(cls.input_to_verbose)
+        return cls.perf_analyzer_args + cls.input_to_options + cls.input_to_verbose
 
     def update_config(self, params=None):
         """
@@ -95,6 +94,53 @@ class PerfAnalyzerConfig:
         if params and type(params) is dict:
             for key in params:
                 self[key] = params[key]
+
+    @classmethod
+    def from_dict(cls, perf_config_dict):
+        perf_config = PerfAnalyzerConfig()
+        for key in [
+                '_args', '_options', '_verbose', '_input_to_verbose',
+                '_input_to_options'
+        ]:
+            if key in perf_config_dict:
+                setattr(perf_config, key, perf_config_dict[key])
+        return perf_config
+
+    def representation(self):
+        """
+        Returns
+        -------
+        str
+            a string representation that does not include the url
+            Useful for mapping measurements across systems.
+        """
+
+        return PerfAnalyzerConfig.remove_url_from_cli_string(
+            self.to_cli_string())
+
+    @classmethod
+    def remove_url_from_cli_string(cls, cli_string):
+        """
+        utility function strips the url from a cli
+        string representation
+
+        Parameters
+        ----------
+        cli_string : str
+            The cli string representation
+        """
+
+        perf_str_tokens = cli_string.split(' ')
+
+        try:
+            url_index = perf_str_tokens.index('-u')
+            # remove -u and the element that comes after it
+            perf_str_tokens.pop(url_index)
+            perf_str_tokens.pop(url_index)
+        except ValueError:
+            pass
+
+        return ' '.join(perf_str_tokens)
 
     def to_cli_string(self):
         """
@@ -175,3 +221,13 @@ class PerfAnalyzerConfig:
             raise TritonModelAnalyzerException(
                 f"The argument '{key}' to the perf_analyzer "
                 "is not supported by the model analyzer.")
+
+    def __contains__(self, key):
+        """
+        Returns
+        -------
+        True if key is in perf_config i.e. the key is a
+        perf config argument
+        """
+
+        return key in PerfAnalyzerConfig.allowed_keys()

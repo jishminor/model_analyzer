@@ -26,8 +26,6 @@ from .config.input.config_command_report import ConfigCommandReport
 
 import sys
 import os
-from prometheus_client.parser import text_string_to_metric_families
-import requests
 import logging
 import shutil
 from urllib.parse import urlparse
@@ -74,15 +72,17 @@ def get_server_handle(config):
         triton_config['model-repository'] = 'remote-model-repository'
         logging.info('Using remote Triton Server...')
         server = TritonServerFactory.create_server_local(path=None,
-                                                         config=triton_config)
-        logging.warn(
+                                                         config=triton_config,
+                                                         gpus=None,
+                                                         log_path=None)
+        logging.warning(
             'GPU memory metrics reported in the remote mode are not'
             ' accuracte. Model Analyzer uses Triton explicit model control to'
             ' load/unload models. Some frameworks do not release the GPU'
             ' memory even when the memory is not being used. Consider'
             ' using the "local" or "docker" mode if you want to accurately'
             ' monitor the GPU memory usage for different models.')
-        logging.warn(
+        logging.warning(
             'Config sweep parameters are ignored in the "remote" mode because'
             ' Model Analyzer does not have access to the model repository of'
             ' the remote Triton Server.')
@@ -92,11 +92,15 @@ def get_server_handle(config):
         triton_config['model-repository'] = config.output_model_repository_path
         triton_config['http-port'] = config.triton_http_endpoint.split(':')[-1]
         triton_config['grpc-port'] = config.triton_grpc_endpoint.split(':')[-1]
-        triton_config['metrics-port'] = urlparse(config.triton_metrics_url).port
+        triton_config['metrics-port'] = urlparse(
+            config.triton_metrics_url).port
         triton_config['model-control-mode'] = 'explicit'
         logging.info('Starting a local Triton Server...')
         server = TritonServerFactory.create_server_local(
-            path=config.triton_server_path, config=triton_config)
+            path=config.triton_server_path,
+            config=triton_config,
+            gpus=config.gpus,
+            log_path=config.triton_output_path)
     elif config.triton_launch_mode == 'docker':
         triton_config = TritonServerConfig()
         triton_config.update_config(config.triton_server_flags)
@@ -104,75 +108,20 @@ def get_server_handle(config):
             config.output_model_repository_path)
         triton_config['http-port'] = config.triton_http_endpoint.split(':')[-1]
         triton_config['grpc-port'] = config.triton_grpc_endpoint.split(':')[-1]
-        triton_config['metrics-port'] = urlparse(config.triton_metrics_url).port
+        triton_config['metrics-port'] = urlparse(
+            config.triton_metrics_url).port
         triton_config['model-control-mode'] = 'explicit'
         logging.info('Starting a Triton Server using docker...')
         server = TritonServerFactory.create_server_docker(
             image=config.triton_docker_image,
             config=triton_config,
-            gpus=GPUDeviceFactory.get_analyzer_gpus(config.gpus))
+            gpus=GPUDeviceFactory.verify_requested_gpus(config.gpus),
+            log_path=config.triton_output_path)
     else:
         raise TritonModelAnalyzerException(
             f"Unrecognized triton-launch-mode : {config.triton_launch_mode}")
 
     return server
-
-
-def get_triton_metrics_gpus(config):
-    """
-    Uses prometheus to request a list of GPU UUIDs corresponding to the GPUs
-    visible to Triton Inference Server
-
-    Parameters
-    ----------
-    config : namespace
-        The arguments passed into the CLI
-    """
-
-    triton_prom_str = str(requests.get(config.triton_metrics_url).content,
-                          encoding='ascii')
-    metrics = text_string_to_metric_families(triton_prom_str)
-
-    triton_gpus = []
-    for metric in metrics:
-        if metric.name == 'nv_gpu_utilization':
-            for sample in metric.samples:
-                triton_gpus.append(sample.labels['gpu_uuid'])
-
-    return triton_gpus
-
-
-def check_triton_and_model_analyzer_gpus(client, server, config):
-    """
-    Check whether Triton Server and Model Analyzer are using the same GPUs
-
-    Parameters
-    ----------
-    client: TritonClient
-        Handle for client
-    server: TritonServer
-        Handle for server
-    config : namespace
-        The arguments passed into the CLI
-
-    Raises
-    ------
-    TritonModelAnalyzerException
-        If they are using different GPUs this exception will be raised.
-    """
-
-    server.start()
-    client.wait_for_server_ready(config.max_retries)
-
-    model_analyzer_gpus = GPUDeviceFactory.get_analyzer_gpus(config.gpus)
-    triton_gpus = get_triton_metrics_gpus(config)
-    if set(model_analyzer_gpus) != set(triton_gpus):
-        raise TritonModelAnalyzerException(
-            "'Triton Server is not using the same GPUs as Model Analyzer: '"
-            f"Model Analyzer GPUs {model_analyzer_gpus}, Triton GPUs {triton_gpus}"
-        )
-
-    server.stop()
 
 
 def get_triton_handles(config):
@@ -229,9 +178,10 @@ def get_cli_and_config_options():
             help=
             'Collect and sort profiling results and generate data and summaries.',
             config=config_analyze)
-        cli.add_subcommand(cmd='report',
-                           help='Generate detailed reports for a single config',
-                           config=config_report)
+        cli.add_subcommand(
+            cmd='report',
+            help='Generate detailed reports for a single config',
+            config=config_report)
         return cli.parse()
 
     except TritonModelAnalyzerException as e:
@@ -263,7 +213,7 @@ def setup_logging(args):
 
 def create_output_model_repository(config):
     """
-    Creates 
+    Creates output model repository
 
     Parameters
     ----------
@@ -282,8 +232,8 @@ def create_output_model_repository(config):
                 ' the "--override-output-model-repository" flag.')
         else:
             shutil.rmtree(config.output_model_repository_path)
-            logging.warn('Overriding the output model repo path '
-                         f'"{config.output_model_repository_path}"...')
+            logging.warning('Overriding the output model repo path '
+                            f'"{config.output_model_repository_path}"...')
             os.mkdir(config.output_model_repository_path)
 
 
@@ -304,10 +254,8 @@ def main():
             create_output_model_repository(config)
 
             client, server = get_triton_handles(config)
+
             # Only check for exit after the events that take a long time.
-            if state_manager.exiting():
-                return
-            check_triton_and_model_analyzer_gpus(client, server, config)
             if state_manager.exiting():
                 return
 
@@ -317,11 +265,11 @@ def main():
         elif args.subcommand == 'analyze':
 
             analyzer = Analyzer(config, server, state_manager)
-            analyzer.analyze()
+            analyzer.analyze(mode=args.mode)
         elif args.subcommand == 'report':
 
             analyzer = Analyzer(config, server, state_manager)
-            analyzer.report()
+            analyzer.report(mode=args.mode)
     finally:
         if server is not None:
             server.stop()
