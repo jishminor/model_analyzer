@@ -84,7 +84,7 @@ profile_models: <comma-delimited-string-list>
 [ duration_seconds: <int> | default: 5 ]
 
 # Duration of waiting time between each metric measurement in seconds
-[ monitoring_interval: <float> | default: 0.01 ]
+[ monitoring_interval: <float> | default: 1 ]
 
 # The protocol used to communicate with the Triton Inference Server. Only 'http' and 'grpc' are allowed for the values.
 [ client_protocol: <string> | default: grpc ]
@@ -105,6 +105,9 @@ profile_models: <comma-delimited-string-list>
 
 # Enables writing the output from the perf_analyzer to stdout.
 [ perf_output: <bool> | default: false ]
+
+# Maximum number of times perf_analyzer is launched with auto adjusted parameters in an attempt to profile a model
+[ perf_analyzer_max_auto_adjusts: <int> | default: 10 ]
 
 # Triton Docker image tag used when launching using Docker mode
 [ triton_docker_image: <string> | default: nvcr.io/nvidia/tritonserver:21.06-py3 ]
