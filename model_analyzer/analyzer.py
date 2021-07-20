@@ -23,6 +23,8 @@ from .config.input.config_command_report \
     import ConfigCommandReport
 from .config.input.config_command_profile \
     import ConfigCommandProfile
+from .config.input.config_command_cb_search \
+    import ConfigCommandCBSearch
 from .model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
@@ -108,6 +110,60 @@ class Analyzer:
                 self._model_manager.run_model(model=model)
             finally:
                 self._state_manager.save_checkpoint()
+
+        profiled_model_list = list(
+            self._state_manager.get_state_variable(
+                'ResultManager.results').keys())
+        logging.info(
+            f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
+        )
+
+    def cb_search(self, client):
+        """
+        Subcommand: CB_SEARCH
+
+        Searches model configuration space using contextual bandit techniques
+
+        Parameters
+        ----------
+        client : TritonClient
+            Instance used to load/unload models
+        
+        Raises
+        ------
+        TritonModelAnalyzerException
+        """
+
+        if not isinstance(self._config, ConfigCommandCBSearch):
+            raise TritonModelAnalyzerException(
+                f"Expected config of type {ConfigCommandProfile},"
+                " got {type(self._config)}.")
+
+        logging.info('Profiling server only metrics...')
+
+        self._metrics_manager = MetricsManager(
+            config=self._config,
+            client=client,
+            server=self._server,
+            result_manager=self._result_manager,
+            state_manager=self._state_manager)
+
+        self._model_manager = ModelManager(
+            config=self._config,
+            client=client,
+            server=self._server,
+            result_manager=self._result_manager,
+            metrics_manager=self._metrics_manager,
+            state_manager=self._state_manager)
+
+        # Get metrics for server only
+        self._server.start()
+        client.wait_for_server_ready(self._config.client_max_retries)
+        self._metrics_manager.profile_server()
+        self._server.stop()
+
+        # For each model in model_set, attempt to learn optimal model configuration
+        self._model_manager.cb_search_models(self._config.model_set)
 
         profiled_model_list = list(
             self._state_manager.get_state_variable(

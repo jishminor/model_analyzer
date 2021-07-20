@@ -23,6 +23,8 @@ from .state.analyzer_state_manager import AnalyzerStateManager
 from .config.input.config_command_profile import ConfigCommandProfile
 from .config.input.config_command_analyze import ConfigCommandAnalyze
 from .config.input.config_command_report import ConfigCommandReport
+from .config.input.config_command_cb_search import ConfigCommandCBSearch
+
 
 import sys
 import os
@@ -166,6 +168,7 @@ def get_cli_and_config_options():
         config_profile = ConfigCommandProfile()
         config_analyze = ConfigCommandAnalyze()
         config_report = ConfigCommandReport()
+        config_cb_search = ConfigCommandCBSearch()
 
         cli = CLI()
         cli.add_subcommand(
@@ -173,6 +176,11 @@ def get_cli_and_config_options():
             help=
             'Run model inference profiling based on specified CLI or config options.',
             config=config_profile)
+        cli.add_subcommand(
+            cmd='cb-search',
+            help=
+            'Run model inference contextual bandit based configuration search based on specified CLI or config options.',
+            config=config_cb_search)
         cli.add_subcommand(
             cmd='analyze',
             help=
@@ -261,6 +269,19 @@ def main():
 
             analyzer = Analyzer(config, server, state_manager)
             analyzer.profile(client=client)
+
+        elif args.subcommand == 'cb-search':
+            # Check/create output model repository
+            create_output_model_repository(config)
+
+            client, server = get_triton_handles(config)
+
+            # Only check for exit after the events that take a long time.
+            if state_manager.exiting():
+                return
+
+            analyzer = Analyzer(config, server, state_manager)
+            analyzer.cb_search(client=client)
 
         elif args.subcommand == 'analyze':
 

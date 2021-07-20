@@ -157,3 +157,13 @@ DEFAULT_OFFLINE_REPORT_PLOTS = {
         'monotonic': False
     }
 }
+
+#
+# CB Search Defaults
+#
+
+DEFAULT_CB_SEARCH_ITERATIONS = 10
+DEFAULT_CB_SEARCH_CONTEXTS = ['duration', 'concurrency', 'request_batch_size']
+DEFAULT_CB_SEARCH_ADF = False
+DEFAULT_CB_SEARCH_NO_LEARN = False
+DEFAULT_CB_CONTEXT_LIST = './contexts.txt'

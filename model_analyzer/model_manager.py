@@ -14,12 +14,18 @@
 
 from model_analyzer.perf_analyzer.perf_config import PerfAnalyzerConfig
 from model_analyzer.output.file_writer import FileWriter
+from .model_analyzer_exceptions import TritonModelAnalyzerException
 from model_analyzer.config.run.run_search import RunSearch
 from model_analyzer.config.run.run_config_generator \
     import RunConfigGenerator
 
 import logging
 import os
+from collections import defaultdict
+import pickle
+import random
+
+from vowpalwabbit import pyvw
 
 
 class ModelManager:
@@ -80,10 +86,44 @@ class ModelManager:
         # Run model inferencing
         if self._config.run_config_search_disable:
             self._run_model_no_search(model)
-        elif self._config.run_config_search_cb:
-            self._run_model_with_cb_search(model)
         else:
             self._run_model_with_search(model)
+
+    def cb_search_models(self, models):
+        """
+        Runs CB search over list of models in config
+        """
+
+        combined_user_model_config_sweeps = []
+
+        # Holds run config generators for each model
+        run_config_generators = defaultdict(lambda: RunConfigGenerator(config=self._config,
+                                                        client=self._client))
+
+        # Generate cartesian product for actions space (model configs)
+        for model in models:
+            model_config_parameters = model.model_config_parameters()
+
+            if model_config_parameters:
+                # user_model_config_sweeps contains list of all possible model config params
+                user_model_config_sweeps = \
+                    run_config_generators[model.model_name()].generate_model_config_combinations(
+                        model_config_parameters)
+                print(user_model_config_sweeps)
+                combined_user_model_config_sweeps.extend(user_model_config_sweeps)
+                for user_model_config_sweep in user_model_config_sweeps:
+                    run_config_generators[model.model_name()].generate_run_config_for_model_sweep(
+                        model, user_model_config_sweep)
+
+        # Instantiate learner in VW for online learning
+        if self._config.adf:
+            vw = pyvw.vw("--cb_explore_adf -q QA --epsilon 0.2")
+        else:
+            vw = pyvw.vw(
+                "--cb_explore {} --epsilon 0.2".format(len(combined_user_model_config_sweeps)))
+
+        self._execute_vw_search(vw, models,
+            self._config.iterations, run_config_generators, actions=combined_user_model_config_sweeps, no_learn=not(self._config.no_learn))
 
     def _run_model_no_search(self, model):
         """
@@ -131,38 +171,6 @@ class ModelManager:
                     for user_model_config_sweep in user_model_config_sweeps:
                         if self._state_manager.exiting():
                             return
-                        self._run_model_config_sweep(
-                            model,
-                            search_model_config=False,
-                            user_model_config_sweep=user_model_config_sweep)
-            else:
-                # Model Config parameters unspecified
-                self._run_model_config_sweep(model, search_model_config=True)
-
-    def _run_model_with_cb_search(self, model):
-        """
-        Uses contextual bandit based search methods to determine optimal model configuration
-        """
-
-        model_config_parameters = model.model_config_parameters()
-
-        # Run config search is enabled, figure out which parameters to sweep over and do sweep
-        if self._config.triton_launch_mode == 'remote':
-            self._run_model_config_sweep(model, search_model_config=False)
-        else:
-            if model_config_parameters:
-                user_model_config_sweeps = \
-                    self._run_config_generator.generate_model_config_combinations(
-                        model_config_parameters)
-                if model.parameters()['concurrency']:
-                    # Both are specified, search over neither
-                    for user_model_config_sweep in user_model_config_sweeps:
-                        self._run_config_generator.generate_run_config_for_model_sweep(
-                            model, user_model_config_sweep)
-                    self._execute_run_configs()
-                else:
-                    # Search through concurrency values only
-                    for user_model_config_sweep in user_model_config_sweeps:
                         self._run_model_config_sweep(
                             model,
                             search_model_config=False,
@@ -247,6 +255,71 @@ class ModelManager:
                 measurements.append(measurement)
 
             self._server.stop()
+
+        return measurements
+
+    def _execute_vw_search(self, vw, models, num_iterations, run_config_generators, actions, no_learn):
+        """
+        Executes the run configs stored in the run
+        config generator until there are none left.
+        Returns obtained measurements. Also sends them
+        to the result manager
+        """
+
+        measurements = []
+
+        if self._config.context_list:
+            with open(self._config.context_list, 'r') as context_file:
+                dictionary_list = pickle.load(context_file) 
+                context_file.close()
+
+        for i in range(1, num_iterations + 1):
+            # Generate parameters for current round of evaluation
+            if self._config.context_list:
+                duration = dictionary_list[i - 1]['duration']
+                concurrency = dictionary_list[i - 1]['concurrency']
+                request_batch_size = dictionary_list[i - 1]['request_batch_size']
+            else:
+                duration = model.get_queue_duration()
+                concurrency = random.randint(1, self._config.run_config_search_max_concurrency)
+                request_batch_size = random.randint(1, model.run_config_search_max_preferred_batch_size)
+
+            for model in models:
+                # Check if exiting
+                if self._state_manager.exiting():
+                    return measurements
+
+                # Remove one run config from the list
+                run_config = run_config_generators[model.model_name()].next_config()
+
+                # If this run config was already run, do not run again, just get the measurement
+                measurement = self._get_measurement_if_config_duplicate(run_config)
+                if measurement:
+                    measurements.append(measurement)
+                    continue
+
+                # Start server, and load model variant
+                self._server.start()
+                if not self._create_and_load_model_variant(
+                        original_name=run_config.model_name(),
+                        variant_config=run_config.model_config()):
+                    self._server.stop()
+                    continue
+
+                # Profile various batch size and concurrency values.
+                # TODO: Need to sort the values for batch size and concurrency
+                # for correct measurment of the GPU memory metrics.
+                perf_output_writer = None if \
+                    not self._config.perf_output else FileWriter()
+                perf_config = run_config.perf_config()
+
+                logging.info(f"Profiling model {perf_config['model-name']}...")
+                measurement = self._metrics_manager.profile_model(
+                    run_config=run_config, perf_output_writer=perf_output_writer)
+                if measurement is not None:
+                    measurements.append(measurement)
+
+                self._server.stop()            
 
         return measurements
 
