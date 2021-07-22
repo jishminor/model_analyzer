@@ -32,7 +32,7 @@ from .config_defaults import \
     DEFAULT_CLIENT_PROTOCOL, DEFAULT_DURATION_SECONDS, \
     DEFAULT_GPUS, DEFAULT_MAX_RETRIES, DEFAULT_CB_SEARCH_ITERATIONS, \
     DEFAULT_MONITORING_INTERVAL, DEFAULT_OFFLINE_OBJECTIVES, DEFAULT_CB_SEARCH_ADF, \
-    DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_CONTEXT_LIST, \
+    DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_CONTEXT_LIST, DEFAULT_CB_SEARCH_EPSILON, \
     DEFAULT_OUTPUT_MODEL_REPOSITORY, DEFAULT_OVERRIDE_OUTPUT_REPOSITORY_FLAG, \
     DEFAULT_PERF_ANALYZER_CPU_UTIL, DEFAULT_PERF_ANALYZER_PATH, DEFAULT_PERF_MAX_AUTO_ADJUSTS, \
     DEFAULT_PERF_OUTPUT_FLAG, DEFAULT_RUN_CONFIG_MAX_CONCURRENCY, \
@@ -240,23 +240,6 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description='List of the models to be profiled'))
         self._add_config(
             ConfigField(
-                'batch_sizes',
-                flags=['--batch-sizes', '-b'],
-                field_type=ConfigListNumeric(int),
-                default_value=DEFAULT_BATCH_SIZES,
-                description=
-                'Comma-delimited list of batch sizes to use for the profiling')
-        )
-        self._add_config(
-            ConfigField(
-                'concurrency',
-                flags=['-c', '--concurrency'],
-                field_type=ConfigListNumeric(int),
-                description=
-                "Comma-delimited list of concurrency values or ranges <start:end:step>"
-                " to be used during profiling"))
-        self._add_config(
-            ConfigField(
                 'adf',
                 flags=['--adf'],
                 field_type=ConfigPrimitive(bool),
@@ -267,10 +250,16 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
             ConfigField(
                 'iterations',
                 flags=['--iterations'],
-                field_type=ConfigPrimitive(bool),
-                parser_args={'action': 'store_true'},
+                field_type=ConfigPrimitive(int),
                 default_value=DEFAULT_CB_SEARCH_ITERATIONS,
                 description="Number of iterations for CB search"))
+        self._add_config(
+            ConfigField(
+                'epsilon',
+                flags=['--epsilon'],
+                field_type=ConfigPrimitive(float),
+                default_value=DEFAULT_CB_SEARCH_EPSILON,
+                description="Epsilon value for CB search"))
         self._add_config(
             ConfigField(
                 'no_learn',
@@ -287,4 +276,13 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 flags=['--context-list'],
                 description=
                 'file holding list of context dictionaries to be used'
+            ))
+        self._add_config(
+            ConfigField(
+                'contexts',
+                flags=['--contexts'],
+                choices=['concurrency-range', 'batch-size'],
+                field_type=ConfigListString(str),
+                description=
+                'Contexts to use for CB learning'
             ))

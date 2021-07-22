@@ -75,7 +75,7 @@ class RunConfigGenerator:
         """
         Parameters
         ----------
-        model : ConfigModel
+        model : ConfigModelProfileSpec
             The model for which a run config is being generated
         model_sweep: dict
             Model config parameters
@@ -89,6 +89,7 @@ class RunConfigGenerator:
             model_config = ModelConfig.create_from_file(
                 f'{model_repository}/{model.model_name()}')
 
+            # Overwrite model config keys with values from model_sweep
             if model_sweep is not None:
                 model_config_dict = model_config.get_config()
                 for key, value in model_sweep.items():
@@ -114,7 +115,7 @@ class RunConfigGenerator:
             model_tmp_name = f'{model.model_name()}_i{model_name_index}'
             model_config.set_field('name', model_tmp_name)
             model_config.set_cpu_only(model.cpu_only())
-            perf_configs = self._generate_perf_config_for_model(
+            perf_configs = self._generate_perf_configs_for_model(
                 model_tmp_name, model)
             for perf_config in perf_configs:
                 self._run_configs.append(
@@ -123,7 +124,7 @@ class RunConfigGenerator:
             model_config = ModelConfig.create_from_triton_api(
                 self._client, model.model_name(), num_retries)
             model_config.set_cpu_only(model.cpu_only())
-            perf_configs = self._generate_perf_config_for_model(
+            perf_configs = self._generate_perf_configs_for_model(
                 model.model_name(), model)
 
             for perf_config in perf_configs:
@@ -191,7 +192,7 @@ class RunConfigGenerator:
         # always return a list.
         return [value]
 
-    def _generate_perf_config_for_model(self, model_name, config_model):
+    def _generate_perf_configs_for_model(self, model_name, config_model):
         """
         Generates a list of PerfAnalyzerConfigs
         """

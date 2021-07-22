@@ -147,9 +147,6 @@ profile_models: <comma-delimited-string-list>
 # Disables automatic config search
 [ run_config_search_disable: <bool> | default: false ]
 
-# Enables contextual bandit config search.
-[ run_config_search_cb: <bool> | default: false ]
-
 # Specify path to config yaml file
 [ config_file: <string> ]
 ```
