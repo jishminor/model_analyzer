@@ -136,7 +136,7 @@ class Analyzer:
 
         if not isinstance(self._config, ConfigCommandCBSearch):
             raise TritonModelAnalyzerException(
-                f"Expected config of type {ConfigCommandProfile},"
+                f"Expected config of type {ConfigCommandCBSearch},"
                 " got {type(self._config)}.")
 
         logging.info('Profiling server only metrics...')
@@ -162,8 +162,8 @@ class Analyzer:
         self._metrics_manager.profile_server()
         self._server.stop()
 
-        # For each model in model_set, attempt to learn optimal model configuration
-        self._model_manager.cb_search_models(self._config.model_set)
+        # For each model in profile_models, attempt to learn optimal model configuration
+        self._model_manager.cb_search_models(self._config.profile_models)
 
         profiled_model_list = list(
             self._state_manager.get_state_variable(

@@ -425,13 +425,6 @@ class ConfigCommandProfile(ConfigCommand):
                         default_value=DEFAULT_RUN_CONFIG_SEARCH_DISABLE,
                         description="Disable run config search."))
         self._add_config(
-            ConfigField('run_config_search_cb',
-                        flags=['--run-config-search-cb'],
-                        field_type=ConfigPrimitive(bool),
-                        parser_args={'action': 'store_true'},
-                        default_value=False,
-                        description="Run contextual bandit config search."))
-        self._add_config(
             ConfigField(
                 'run_config_search_max_preferred_batch_size',
                 flags=['--run-config-search-max-preferred-batch-size'],

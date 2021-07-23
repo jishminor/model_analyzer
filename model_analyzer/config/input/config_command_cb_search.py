@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import numba
-import psutil
 from .config_field import ConfigField
 from .config_primitive import ConfigPrimitive
 from .config_list_string import ConfigListString
@@ -28,18 +27,11 @@ from .config_command import ConfigCommand
 from .config_command_profile import ConfigCommandProfile
 
 from .config_defaults import \
-    DEFAULT_BATCH_SIZES, DEFAULT_CHECKPOINT_DIRECTORY, \
-    DEFAULT_CLIENT_PROTOCOL, DEFAULT_DURATION_SECONDS, \
-    DEFAULT_GPUS, DEFAULT_MAX_RETRIES, DEFAULT_CB_SEARCH_ITERATIONS, \
+    DEFAULT_CHECKPOINT_DIRECTORY, DEFAULT_DURATION_SECONDS, DEFAULT_RUN_CONFIG_MAX_CONCURRENCY, \
+    DEFAULT_GPUS, DEFAULT_CB_SEARCH_ITERATIONS, DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT, \
     DEFAULT_MONITORING_INTERVAL, DEFAULT_OFFLINE_OBJECTIVES, DEFAULT_CB_SEARCH_ADF, \
     DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_CONTEXT_LIST, DEFAULT_CB_SEARCH_EPSILON, \
-    DEFAULT_OUTPUT_MODEL_REPOSITORY, DEFAULT_OVERRIDE_OUTPUT_REPOSITORY_FLAG, \
-    DEFAULT_PERF_ANALYZER_CPU_UTIL, DEFAULT_PERF_ANALYZER_PATH, DEFAULT_PERF_MAX_AUTO_ADJUSTS, \
-    DEFAULT_PERF_OUTPUT_FLAG, DEFAULT_RUN_CONFIG_MAX_CONCURRENCY, \
-    DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT, DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE, \
-    DEFAULT_RUN_CONFIG_SEARCH_DISABLE, DEFAULT_TRITON_DOCKER_IMAGE, DEFAULT_TRITON_GRPC_ENDPOINT, \
-    DEFAULT_TRITON_HTTP_ENDPOINT, DEFAULT_TRITON_LAUNCH_MODE, DEFAULT_TRITON_METRICS_URL, \
-    DEFAULT_TRITON_SERVER_PATH, DEFAULT_PERF_ANALYZER_TIMEOUT
+    DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE
 
 from .objects.config_model_profile_spec import ConfigModelProfileSpec
 from model_analyzer.triton.server.server_config import \
@@ -136,6 +128,33 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description=
                 'Allows custom configuration of the triton instances used by model analyzer.'
             ))
+        self._add_config(
+            ConfigField(
+                'run_config_search_max_concurrency',
+                flags=['--run-config-search-max-concurrency'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_RUN_CONFIG_MAX_CONCURRENCY,
+                description=
+                "Max concurrency value that run config search should not go beyond that."
+            ))
+        self._add_config(
+            ConfigField(
+                'run_config_search_max_instance_count',
+                flags=['--run-config-search-max-instance-count'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT,
+                description=
+                "Max instance count value that run config search should not go beyond that."
+            ))
+        self._add_config(
+            ConfigField(
+                'run_config_search_max_preferred_batch_size',
+                flags=['--run-config-search-max-preferred-batch-size'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE,
+                description=
+                "Max preferred batch size value that run config search should not go beyond that."
+            ))
 
         def objective_list_output_mapper(objectives):
             # Takes a list of objectives and maps them
@@ -166,6 +185,10 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                     'max': ConfigPrimitive(int),
                 }),
                 'gpu_used_memory':
+                ConfigObject(schema={
+                    'max': ConfigPrimitive(int),
+                }),
+                'cpu_used_ram':
                 ConfigObject(schema={
                     'max': ConfigPrimitive(int),
                 }),
@@ -218,8 +241,8 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
             model_object_to_config_model_profile_spec)
         self._add_config(
             ConfigField(
-                'model_set',
-                flags=['--model-set'],
+                'profile_models',
+                flags=['--profile-models'],
                 field_type=ConfigUnion([
                     profile_model_scheme,
                     ConfigListGeneric(
@@ -286,3 +309,74 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description=
                 'Contexts to use for CB learning'
             ))
+
+    def _preprocess_and_verify_arguments(self):
+        """
+        Enforces some rules on the config.
+
+        Raises
+        ------
+        TritonModelAnalyzerException
+            If there is a problem with arguments or config.
+        """
+
+        if self.triton_launch_mode == 'remote':
+            if self.client_protocol == 'http' and not self.triton_http_endpoint:
+                raise TritonModelAnalyzerException(
+                    "client-protocol is 'http'. Must specify triton-http-endpoint "
+                    "if connecting to already running server or change protocol using "
+                    "--client-protocol.")
+            if self.client_protocol == 'grpc' and not self.triton_grpc_endpoint:
+                raise TritonModelAnalyzerException(
+                    "client-protocol is 'grpc'. Must specify triton-grpc-endpoint "
+                    "if connecting to already running server or change protocol using "
+                    "--client-protocol.")
+
+    def _autofill_values(self):
+        """
+        Fill in the implied or default
+        config values.
+        """
+
+        cpu_only = False
+        if not numba.cuda.is_available():
+            cpu_only = True
+
+        new_profile_models = {}
+        for model in self.profile_models:
+            new_model = {'cpu_only': (model.cpu_only() or cpu_only)}
+
+            # Objectives
+            if not model.objectives():
+                new_model['objectives'] = self.objectives
+            else:
+                new_model['objectives'] = model.objectives()
+
+            # Constraints
+            if not model.constraints():
+                if 'constraints' in self._fields and self._fields[
+                        'constraints'].value():
+                    new_model['constraints'] = self.constraints
+            else:
+                new_model['constraints'] = model.constraints()
+
+            # Perf analyzer flags
+            if not model.perf_analyzer_flags():
+                new_model['perf_analyzer_flags'] = self.perf_analyzer_flags
+            else:
+                new_model['perf_analyzer_flags'] = model.perf_analyzer_flags()
+
+            # Perf analyzer flags
+            if not model.triton_server_flags():
+                new_model['triton_server_flags'] = self.triton_server_flags
+            else:
+                new_model['triton_server_flags'] = model.triton_server_flags()
+
+            # Transfer model config parameters directly
+            if model.model_config_parameters():
+                new_model[
+                    'model_config_parameters'] = model.model_config_parameters(
+                    )
+
+            new_profile_models[model.model_name()] = new_model
+        self._fields['profile_models'].set_value(new_profile_models)

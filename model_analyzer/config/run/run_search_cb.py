@@ -26,9 +26,6 @@ class RunSearchCB():
     """
 
     def __init__(self, config, model_configs):
-        self._max_concurrency = config.run_config_search_max_concurrency
-        self._max_instance_count = config.run_config_search_max_instance_count
-        self._max_preferred_batch_size = config.run_config_search_max_preferred_batch_size
         self._model_configs = model_configs
         self._no_learn = config.no_learn
         self._adf = config.adf

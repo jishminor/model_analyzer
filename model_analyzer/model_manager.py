@@ -20,6 +20,8 @@ from model_analyzer.config.run.run_search_cb import RunSearchCB
 from model_analyzer.config.run.run_config_generator \
     import RunConfigGenerator
 from model_analyzer.config.run.run_config import RunConfig
+from model_analyzer.triton.model.model_config import ModelConfig
+
 
 import logging
 import os
@@ -94,7 +96,13 @@ class ModelManager:
         Runs CB search over list of models in config
         """
 
+        # Holds model config dicts generated for each model based on model config params
         combined_user_model_config_sweeps = {}
+
+        # Holds the resultant ModelConfig objects for use in CB Search
+        model_configs = []
+
+        model_repository = self._config.get_all_config()['model_repository']
 
         # Generate cartesian product for actions space (model configs)
         for model in models:
@@ -105,16 +113,30 @@ class ModelManager:
                     self._run_config_generator.generate_model_config_combinations(
                         model_config_parameters)
 
-                # Assign index to each model config in model_config_sweep
-                for i, model_config in enumerate(combined_user_model_config_sweeps[model.model_name()]):
+                # Assign index to each model config dict in model_config_sweep
+                model_config = ModelConfig.create_from_file(
+                    f'{model_repository}/{model.model_name()}')
+                for i, model_sweep in enumerate(combined_user_model_config_sweeps[model.model_name()]):
                     model_tmp_name = f'{model.model_name()}_i{i}'
-                    model_config.set_field('name', model_tmp_name)
 
-        print(combined_user_model_config_sweeps)
+                    # Overwrite model config keys with values from model_sweep
+                    model_config_dict = model_config.get_config()
+                    for key, value in model_sweep.items():
+                        if value is not None:
+                            model_config_dict[key] = value
+                    model_config = ModelConfig.create_from_dictionary(
+                        model_config_dict)
+                    
+                    model_config.set_field('name', model_tmp_name)
+                    model_configs.append(model_config)
+            else:
+                raise TritonModelAnalyzerException(f"model_config_parameters must be passed for model: {model.model_name()}")
+
+        print(model_configs)
 
         # combined_user_model_config_sweeps contains 
         # all possible model configs to use as searched action space
-        self._run_search_cb = RunSearchCB(self._config, combined_user_model_config_sweeps)
+        self._run_search_cb = RunSearchCB(self._config, model_configs)
 
         self._execute_vw_search(models, self._config.iterations)
 
