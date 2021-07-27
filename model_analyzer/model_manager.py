@@ -20,7 +20,6 @@ from model_analyzer.config.run.run_search_cb import RunSearchCB
 from model_analyzer.config.run.run_config_generator \
     import RunConfigGenerator
 from model_analyzer.config.run.run_config import RunConfig
-from model_analyzer.triton.model.model_config import ModelConfig
 
 
 import logging
@@ -96,49 +95,22 @@ class ModelManager:
         Runs CB search over list of models in config
         """
 
-        # Holds model config dicts generated for each model based on model config params
-        combined_user_model_config_sweeps = {}
-
-        # Holds the resultant ModelConfig objects for use in CB Search
-        model_configs = []
-
-        model_repository = self._config.get_all_config()['model_repository']
-
         # Generate cartesian product for actions space (model configs)
         for model in models:
             model_config_parameters = model.model_config_parameters()
 
             if model_config_parameters:
-                combined_user_model_config_sweeps[model.model_name()] = \
+                user_model_config_sweeps = \
                     self._run_config_generator.generate_model_config_combinations(
                         model_config_parameters)
 
-                # Assign index to each model config dict in model_config_sweep
-                model_config = ModelConfig.create_from_file(
-                    f'{model_repository}/{model.model_name()}')
-                for i, model_sweep in enumerate(combined_user_model_config_sweeps[model.model_name()]):
-                    model_tmp_name = f'{model.model_name()}_i{i}'
+            print(user_model_config_sweeps)
 
-                    # Overwrite model config keys with values from model_sweep
-                    model_config_dict = model_config.get_config()
-                    for key, value in model_sweep.items():
-                        if value is not None:
-                            model_config_dict[key] = value
-                    model_config = ModelConfig.create_from_dictionary(
-                        model_config_dict)
-                    
-                    model_config.set_field('name', model_tmp_name)
-                    model_configs.append(model_config)
-            else:
-                raise TritonModelAnalyzerException(f"model_config_parameters must be passed for model: {model.model_name()}")
+            # user_model_config_sweeps contains all possible model configs for current model 
+            # to use as searched action space
+            self._run_search_cb = RunSearchCB(self._config, model, user_model_config_sweeps)
 
-        print(model_configs)
-
-        # combined_user_model_config_sweeps contains 
-        # all possible model configs to use as searched action space
-        self._run_search_cb = RunSearchCB(self._config, model_configs)
-
-        self._execute_vw_search(models, self._config.iterations)
+            self._execute_vw_search(self._config.iterations)
 
     def _run_model_no_search(self, model):
         """
@@ -273,7 +245,7 @@ class ModelManager:
 
         return measurements
 
-    def _execute_vw_search(self, models, num_iterations):
+    def _execute_vw_search(self, num_iterations):
         """
         Executes the run configs stored in the run
         config generator until there are none left.
@@ -295,56 +267,55 @@ class ModelManager:
                 request_batch_size = dictionary_list[i - 1]['batch-size']
             else:
                 concurrency = random.randint(1, self._config.run_config_search_max_concurrency)
-                request_batch_size = random.randint(1, model.run_config_search_max_preferred_batch_size)
+                request_batch_size = random.randint(1, self._config.run_config_search_max_preferred_batch_size)
 
             # Pass context based on passed arguments to vw to get an action
+            # Note that keys in context must match those in perf analyzer args
             context = {}
             if 'concurrency-range' in self._config.contexts:
                 context['concurrency-range'] = concurrency
             if 'batch-size' in self._config.contexts:
                 context['batch-size'] = request_batch_size
 
-            for model in models:
-                # Check if exiting
-                if self._state_manager.exiting():
-                    return measurements
+            # Check if exiting
+            if self._state_manager.exiting():
+                return measurements
 
-                # Get predicted model_config and corresponding probability from vw based on the context passed
-                model_config, prob = self._run_search_cb.get_vw_predicted_model_config(model, context)
-                logging.info('Context: {}, Action: {}, Prob: {}'.format(context, model_config, prob))
+            # Get predicted model_config and corresponding probability from vw based on the context passed
+            model_config, prob = self._run_search_cb.get_vw_predicted_model_config(context)
+            logging.info('Context: {}, Action: {}, Prob: {}'.format(context, model_config, prob))
 
-                # Generate a perf analyzer config for this run using our context
-                # This sets the concurrency, batch size, and model name for the the requests
-                perf_config = PerfAnalyzerConfig()
-                perf_config.update_config(context)
-                perf_config.update_config({'model-name': model_config.model_name()})
+            # Generate a perf analyzer config for this run using our context
+            # This sets the concurrency, batch size, and model name for the the requests
+            perf_config = PerfAnalyzerConfig()
+            perf_config.update_config(context)
+            perf_config.update_config({'model-name': model_config.get_field('name')})
 
-                # Start server, and load model variant based on the predicted model_config
-                self._server.start()
-                if not self._create_and_load_model_variant(
-                        original_name=model.model_name(),
-                        variant_config=model_config):
-                    self._server.stop()
-                    continue
+            # Start server, and load model variant based on the predicted model_config
+            self._server.start()
+            if not self._create_and_load_model_variant(
+                    original_name=self._run_search_cb.get_model_name(),
+                    variant_config=model_config):
+                self._server.stop()
+                continue
 
-                # Profile various batch size and concurrency values.
-                # TODO: Need to sort the values for batch size and concurrency
-                # for correct measurement of the GPU memory metrics.
-                perf_output_writer = None if \
-                    not self._config.perf_output else FileWriter()
+            # Profile various batch size and concurrency values.
+            # TODO: Need to sort the values for batch size and concurrency
+            # for correct measurement of the GPU memory metrics.
+            perf_output_writer = None if \
+                not self._config.perf_output else FileWriter()
 
-                # Generate RunConfig from model_config and perf_config
-                run_config = RunConfig(model.model_name(), model_config, perf_config)
+            # Generate RunConfig from model_config and perf_config
+            run_config = RunConfig(self._run_search_cb.get_model_name(), model_config, perf_config)
 
-                logging.info(f"Profiling model {model_config.model_name()}...")
-                measurement = self._metrics_manager.profile_model(
-                    run_config=run_config, perf_output_writer=perf_output_writer)
-                if measurement is not None:
-                    measurements.append(measurement)
-                    self._run_search_cb.register_cost(model, model_config, context, prob, measurement)
+            logging.info(f"Profiling model {model_config.get_field('name')}...")
+            measurement = self._metrics_manager.profile_model(
+                run_config=run_config, perf_output_writer=perf_output_writer)
+            if measurement is not None:
+                measurements.append(measurement)
+                self._run_search_cb.register_cost(model_config, context, prob, measurement)
 
-
-                self._server.stop()            
+            self._server.stop()            
 
         return measurements
 

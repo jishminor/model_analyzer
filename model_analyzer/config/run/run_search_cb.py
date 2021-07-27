@@ -14,7 +14,7 @@
 
 from model_analyzer.config.input.objects.config_model_profile_spec \
     import ConfigModelProfileSpec
-from model_analyzer.constants import THROUGHPUT_GAIN
+from model_analyzer.triton.model.model_config import ModelConfig
 import random
 
 from vowpalwabbit import pyvw
@@ -25,45 +25,67 @@ class RunSearchCB():
     A class responsible for searching the config space using CB techniques.
     """
 
-    def __init__(self, config, model_configs):
-        self._model_configs = model_configs
+    def __init__(self, config, model, user_model_config_sweeps):
+        self._user_model_config_sweeps = user_model_config_sweeps
+        self._model = model
         self._no_learn = config.no_learn
         self._adf = config.adf
         self._epsilon = config.epsilon
+        self._model_repository = config.get_all_config()['model_repository']
 
         # Instantiate learner in VW for online learning
         if self._adf:
             self._vw = pyvw.vw("--cb_explore_adf -q CA --epsilon {}".format(self._epsilon))
         else:
             self._vw = pyvw.vw(
-                "--cb_explore {} --epsilon {}".format(len(self._model_configs), self._epsilon))
+                "--cb_explore {} --epsilon {}".format(len(self._user_model_config_sweeps), self._epsilon))
 
-    def get_vw_predicted_model_config(self, model, context):
+    def get_model_name(self):
+        return self._model.model_name()
+
+    def get_vw_predicted_model_config(self, context):
         """
         Fetch the run config from the VW predicted best model_config
         """
 
-        vw_text = model.to_vw_example_format(context)
+        vw_text = self._to_vw_example_format(context)
         pmf = self._vw.predict(vw_text)
         chosen_model_config_index, prob = self._sample_custom_pmf(pmf)
-        return self._model_configs[chosen_model_config_index], prob
+
+        # Generate ModelConfig from model_config_param dict (model_sweep)
+        model_config = ModelConfig.create_from_file(
+            f'{self._model_repository}/{self._model.model_name()}')
+        model_sweep = self._user_model_config_sweeps[chosen_model_config_index]
+        model_tmp_name = f'{self._model.model_name()}_i{chosen_model_config_index}'
+
+        # Overwrite model config keys with values from model_sweep
+        model_config_dict = model_config.get_config()
+        for key, value in model_sweep.items():
+            if value is not None:
+                model_config_dict[key] = value
+        model_config = ModelConfig.create_from_dictionary(
+            model_config_dict)
+        
+        model_config.set_field('name', model_tmp_name)
+
+        return model_config, prob
 
     def get_random_model_config(self):
         """
         Get a random run config
         """
 
-        chosen_model_config_index = random.randint(0, len(self._model_configs) + 1)
-        return self._model_configs[chosen_model_config_index], 1 / len(self._model_configs)
+        chosen_model_config_index = random.randint(0, len(self._user_model_config_sweeps) + 1)
+        return self._user_model_config_sweeps[chosen_model_config_index], 1 / len(self._user_model_config_sweeps)
 
-    def register_cost(self, model, model_config, context, prob, measurement):
+    def register_cost(self, model_config, context, prob, measurement):
         """
         Register cost of measurement generated from profiling model with VW
         Cost is measured as delta from objectives
         """
 
         costs = {}
-        for key, value in model.objectives().items():
+        for key, value in self._model.objectives().items():
             costs[key] = abs(measurement.get_metric(key).value() - value)
 
         # Sum all costs to generate final cost
@@ -83,7 +105,7 @@ class RunSearchCB():
         """
 
         if cb_label is not None:
-            chosen_model_config, cost, prob = cb_label
+            chosen_model_sweep, cost, prob = cb_label
 
         # Generate context string
         context_string = ""
@@ -98,22 +120,37 @@ class RunSearchCB():
         if self._adf:
             # Generate adf formatted cb data
             action_string += "shared |Context {}\n".format(context_string)
-            for model_config in self._model_configs:
-                if cb_label is not None and model_config == chosen_model_config:
+            for model_sweep in self._user_model_config_sweeps:
+                if cb_label is not None and model_sweep == chosen_model_sweep:
                     action_string += "0:{}:{} ".format(cost, prob)
 
                 action_string += "|Action "
-                for k, v in model_config.items():
-                    action_string += k
-                    if type(v) == int or type(v) == float:
+                for k, v in model_sweep.items():
+                    if k == 'max_batch_size':
+                        action_string += k
                         action_string += ":{} ".format(v)
-                    else:
-                        action_string += "={} ".format(v)
+                    if k == 'dynamic_batching':
+                        for k, v in v.items():
+                            if k == 'preferred_batch_size':
+                                action_string += k
+                                action_string += ":{} ".format(v)
+                            if k == 'max_queue_delay_microseconds':
+                                action_string += k
+                                action_string += ":{} ".format(v)
+                    if k == 'instance_group':
+                        for instance in v:
+                            if instance['kind'] == 'KIND_CPU':
+                                action_string += 'cpu_instances'
+                                action_string += ":{} ".format(instance['count'])
+                            if instance['kind'] == 'KIND_GPU':
+                                action_string += 'gpu_instances'
+                                action_string += ":{} ".format(instance['count'])
+
 
         else:
             # Generate standard formatted cb data
             if cb_label is not None:
-                chosen_model_config_index = self._model_configs.index(chosen_model_config)
+                chosen_model_config_index = self._user_model_config_sweeps.index(chosen_model_config)
                 # VW doesn't allow model_config id of 0
                 action_string += "{}:{}:{} ".format(
                     chosen_model_config_index + 1, cost, prob)

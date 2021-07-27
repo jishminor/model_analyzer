@@ -30,7 +30,7 @@ from .config_defaults import \
     DEFAULT_CHECKPOINT_DIRECTORY, DEFAULT_DURATION_SECONDS, DEFAULT_RUN_CONFIG_MAX_CONCURRENCY, \
     DEFAULT_GPUS, DEFAULT_CB_SEARCH_ITERATIONS, DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT, \
     DEFAULT_MONITORING_INTERVAL, DEFAULT_OFFLINE_OBJECTIVES, DEFAULT_CB_SEARCH_ADF, \
-    DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_CONTEXT_LIST, DEFAULT_CB_SEARCH_EPSILON, \
+    DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_SEARCH_EPSILON, DEFAULT_CB_SEARCH_CONTEXTS, \
     DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE
 
 from .objects.config_model_profile_spec import ConfigModelProfileSpec
@@ -295,7 +295,6 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
             ConfigField(
                 'context_list',
                 field_type=ConfigPrimitive(str),
-                default_value=DEFAULT_CB_CONTEXT_LIST,
                 flags=['--context-list'],
                 description=
                 'file holding list of context dictionaries to be used'
@@ -306,6 +305,7 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 flags=['--contexts'],
                 choices=['concurrency-range', 'batch-size'],
                 field_type=ConfigListString(str),
+                default_value=DEFAULT_CB_SEARCH_CONTEXTS,
                 description=
                 'Contexts to use for CB learning'
             ))
