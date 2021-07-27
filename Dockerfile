@@ -58,7 +58,9 @@ RUN chmod +x build_wheel.sh && \
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install nvidia-pyindex && \
     python3 -m pip install wheels/triton_model_analyzer-*-manylinux1_x86_64.whl && \
-    python3 -m pip install vowpalwabbit
+    python3 -m pip install vowpalwabbit && \
+    python3 -m pip install --upgrade protobuf
+
 
 RUN apt-get install -y wkhtmltopdf
 

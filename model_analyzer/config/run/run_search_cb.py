@@ -39,6 +39,8 @@ class RunSearchCB():
         else:
             self._vw = pyvw.vw(
                 "--cb_explore {} --epsilon {}".format(len(self._user_model_config_sweeps), self._epsilon))
+        self._base_model_config = ModelConfig.create_from_file(
+            f'{self._model_repository}/{self._model.model_name()}')
 
     def get_model_name(self):
         return self._model.model_name()
@@ -52,21 +54,8 @@ class RunSearchCB():
         pmf = self._vw.predict(vw_text)
         chosen_model_config_index, prob = self._sample_custom_pmf(pmf)
 
-        # Generate ModelConfig from model_config_param dict (model_sweep)
-        model_config = ModelConfig.create_from_file(
-            f'{self._model_repository}/{self._model.model_name()}')
         model_sweep = self._user_model_config_sweeps[chosen_model_config_index]
-        model_tmp_name = f'{self._model.model_name()}_i{chosen_model_config_index}'
-
-        # Overwrite model config keys with values from model_sweep
-        model_config_dict = model_config.get_config()
-        for key, value in model_sweep.items():
-            if value is not None:
-                model_config_dict[key] = value
-        model_config = ModelConfig.create_from_dictionary(
-            model_config_dict)
-        
-        model_config.set_field('name', model_tmp_name)
+        model_config = self._generate_model_config_from_sweep(model_sweep, chosen_model_config_index)
 
         return model_config, prob
 
@@ -76,7 +65,26 @@ class RunSearchCB():
         """
 
         chosen_model_config_index = random.randint(0, len(self._user_model_config_sweeps) + 1)
-        return self._user_model_config_sweeps[chosen_model_config_index], 1 / len(self._user_model_config_sweeps)
+        model_sweep = self._user_model_config_sweeps[chosen_model_config_index]
+        model_config = self._generate_model_config_from_sweep(model_sweep, chosen_model_config_index)
+        return model_config, 1 / len(self._user_model_config_sweeps)
+
+    def _generate_model_config_from_sweep(self, model_sweep, index):
+        # Generate ModelConfig from model_config_param dict (model_sweep)
+        model_tmp_name = f'{self._model.model_name()}_i{index}'
+
+        # Overwrite model config keys with values from model_sweep
+        model_config_dict = self._base_model_config.get_config()
+        for key, value in model_sweep.items():
+            if value is not None:
+                model_config_dict[key] = value
+        model_config = ModelConfig.create_from_dictionary(
+            model_config_dict)
+        
+        model_config.set_field('name', model_tmp_name)
+        model_config.set_cpu_only(self._model.cpu_only())
+
+        return model_config
 
     def register_cost(self, model_config, context, prob, measurement):
         """
@@ -138,14 +146,13 @@ class RunSearchCB():
                                 action_string += k
                                 action_string += ":{} ".format(v)
                     if k == 'instance_group':
-                        for instance in v:
-                            if instance['kind'] == 'KIND_CPU':
+                        for instance_group in v:
+                            if instance_group['kind'] == 'KIND_CPU':
                                 action_string += 'cpu_instances'
-                                action_string += ":{} ".format(instance['count'])
-                            if instance['kind'] == 'KIND_GPU':
+                                action_string += ":{} ".format(instance_group['count'])
+                            if instance_group['kind'] == 'KIND_GPU':
                                 action_string += 'gpu_instances'
-                                action_string += ":{} ".format(instance['count'])
-
+                                action_string += ":{} ".format(instance_group['count'])
 
         else:
             # Generate standard formatted cb data

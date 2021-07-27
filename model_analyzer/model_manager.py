@@ -104,8 +104,6 @@ class ModelManager:
                     self._run_config_generator.generate_model_config_combinations(
                         model_config_parameters)
 
-            print(user_model_config_sweeps)
-
             # user_model_config_sweeps contains all possible model configs for current model 
             # to use as searched action space
             self._run_search_cb = RunSearchCB(self._config, model, user_model_config_sweeps)
