@@ -110,7 +110,7 @@ profile_models: <comma-delimited-string-list>
 [ perf_analyzer_max_auto_adjusts: <int> | default: 10 ]
 
 # Triton Docker image tag used when launching using Docker mode
-[ triton_docker_image: <string> | default: nvcr.io/nvidia/tritonserver:21.06-py3 ]
+[ triton_docker_image: <string> | default: nvcr.io/nvidia/tritonserver:21.07-py3 ]
 
 # Triton Server HTTP endpoint url used by Model Analyzer client. Will be ignored if server-launch-mode is not 'remote'".
 [ triton_http_endpoint: <string> | default: localhost:8000 ]
@@ -143,6 +143,9 @@ profile_models: <comma-delimited-string-list>
 
 # Maximum preferred batch size used for the automatic config search.
 [ run_config_search_max_preferred_batch_size: <int> | default: 16 ]
+
+# Disables automatic preferred batch size search.
+[ run_config_search_preferred_batch_size_disable: <bool> | default: false ]
 
 # Disables automatic config search
 [ run_config_search_disable: <bool> | default: false ]
