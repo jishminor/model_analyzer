@@ -281,11 +281,23 @@ class ModelManager:
 
             # Get predicted model_config and corresponding probability from vw based on the context passed
             model_config, prob = self._run_search_cb.get_vw_predicted_model_config(context)
-            logging.info('Context: {}, Action: {}, Prob: {}'.format(context, model_config, prob))
+            logging.info('Context: {}, Action: {}, Prob: {}'.format(context, model_config.to_dict(), prob))
 
             # Generate a perf analyzer config for this run using our context
-            # This sets the concurrency, batch size, and model name for the the requests
+            analyzer_config = self._config.get_all_config()
             perf_config = PerfAnalyzerConfig()
+            perf_config_params = {
+                'protocol': analyzer_config['client_protocol'],
+                'url': 
+                    analyzer_config['triton_http_endpoint']
+                    if analyzer_config['client_protocol'] == 'http' else
+                    analyzer_config['triton_grpc_endpoint']
+                ,
+                'measurement-mode': 'count_windows'
+            }
+            perf_config.update_config(perf_config_params)
+
+            # This sets the concurrency, batch size, and model name for the the requests
             perf_config.update_config(context)
             perf_config.update_config({'model-name': model_config.get_field('name')})
 
@@ -307,15 +319,18 @@ class ModelManager:
             run_config = RunConfig(self._run_search_cb.get_model_name(), model_config, perf_config)
 
             logging.info(f"Profiling model {model_config.get_field('name')}...")
-            measurement = self._metrics_manager.profile_model(
-                run_config=run_config, perf_output_writer=perf_output_writer)
-            if measurement is not None:
-                measurements.append(measurement)
-                self._run_search_cb.register_cost(model_config, context, prob, measurement)
 
-            self._server.stop()            
+            # Only profile model if request batch size is <= max batch size for model
+            if int(context['batch-size']) <= int(model_config.to_dict()['maxBatchSize']):
+                measurement = self._metrics_manager.profile_model(
+                    run_config=run_config, perf_output_writer=perf_output_writer)
+            else:
+                measurement = None
 
-        return measurements
+            # Register cost with CB learner
+            self._run_search_cb.register_cost(model_config, context, prob, measurement)
+
+            self._server.stop()
 
     def _create_and_load_model_variant(self, original_name, variant_config):
         """
@@ -332,7 +347,7 @@ class ModelManager:
                                          variant_name)
             try:
                 # Create the directory for the new model
-                os.makedirs(new_model_dir, exist_ok=False)
+                os.makedirs(new_model_dir, exist_ok=True)
                 variant_config.write_config_to_file(new_model_dir,
                                                     original_model_dir,
                                                     self._last_config_variant)
