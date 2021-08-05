@@ -49,7 +49,7 @@ class RunSearchCB():
         if self._adf:
             vw_string += '--cb_explore_adf -q CA '
         else:
-            vw_string = '--cb_explore {len(self._user_model_config_sweeps)} ')
+            vw_string = f'--cb_explore {len(self._user_model_config_sweeps)} '
 
         if not logging.getLogger().isEnabledFor(logging.DEBUG):
             vw_string += '--quiet '

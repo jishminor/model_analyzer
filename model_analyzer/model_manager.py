@@ -110,6 +110,8 @@ class ModelManager:
 
             self._execute_vw_search(self._config.iterations)
 
+            self._state_manager.save_checkpoint()
+
     def _run_model_no_search(self, model):
         """
         Creates run configs from specified combinations and executes
