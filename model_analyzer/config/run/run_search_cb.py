@@ -31,21 +31,43 @@ class RunSearchCB():
         self._model = model
         self._no_learn = config.no_learn
         self._adf = config.adf
-        self._epsilon = config.epsilon
+        self._encode_context_numeric = config.encode_context_numeric
+        self._encode_actions_numeric = config.encode_actions_numeric
         self._model_repository = config.get_all_config()['model_repository']
-
-        # Instantiate learner in VW for online learning
-        if self._adf:
-            self._vw = pyvw.vw("--cb_explore_adf -q CA --epsilon {}".format(self._epsilon))
-        else:
-            self._vw = pyvw.vw(
-                "--cb_explore {} --epsilon {}".format(len(self._user_model_config_sweeps), self._epsilon))
 
         # Filter out invalid model config sweeps from passed list
         self._remove_known_invalid_model_configs()
 
         # Holds most recently selected active model config index
         self._active_model_config_index = 0
+
+        # Shuffle the model config sweeps
+        random.shuffle(self._user_model_config_sweeps)
+
+        # Instantiate learner in VW for online learning
+        vw_string = ''
+        if self._adf:
+            vw_string += '--cb_explore_adf -q CA '
+        else:
+            vw_string = '--cb_explore {len(self._user_model_config_sweeps)} ')
+
+        if not logging.getLogger().isEnabledFor(logging.DEBUG):
+            vw_string += '--quiet '
+        
+        if config.exploration == 'epsilon':
+            vw_string += f'--epsilon {config.epsilon}'
+        elif config.exploration == 'first':
+            vw_string += f'--first {config.tau}'
+        elif config.exploration == 'bag':
+            vw_string += f'--bag {config.policies}'
+        elif config.exploration == 'cover':
+            vw_string += f'--cover {config.policies}'
+        elif config.exploration == 'softmax':
+            vw_string += f'--softmax --lambda {config.lambda_value}'
+        elif config.exploration == 'rnd':
+            vw_string += f'--rnd {config.rnd} --epsilon {config.epsilon}'
+
+        self._vw = pyvw.vw(vw_string) 
 
     def _remove_known_invalid_model_configs(self):
         # Remove all items in actions list where max batch size < preferred_batchsize
@@ -71,8 +93,8 @@ class RunSearchCB():
 
         vw_text = self._to_vw_example_format(context)
         pmf = self._vw.predict(vw_text)
+        logging.debug(pmf)
         self._active_model_config_index, prob = self._sample_custom_pmf(pmf)
-
         model_sweep = self._user_model_config_sweeps[self._active_model_config_index]
         model_config = self._generate_model_config_from_sweep(model_sweep)
 
@@ -83,7 +105,7 @@ class RunSearchCB():
         Get a random run config
         """
 
-        self._active_model_config_index = random.randint(0, len(self._user_model_config_sweeps) + 1)
+        self._active_model_config_index = random.randint(0, len(self._user_model_config_sweeps) - 1)
         model_sweep = self._user_model_config_sweeps[self._active_model_config_index]
         model_config = self._generate_model_config_from_sweep(model_sweep)
         return model_config, 1 / len(self._user_model_config_sweeps)
@@ -116,19 +138,20 @@ class RunSearchCB():
         if measurement:
             costs = {}
             for key, value in self._model.objectives().items():
-                logging.info('Target: {}, Desired: {}, Achieved: {}'.format(key, value, measurement.get_metric(key).value()))
+                logging.info(f'Target: {key}, Desired: {value}, Achieved: {measurement.get_metric(key).value()}')
                 costs[key] = abs(measurement.get_metric(key).value() - value)
 
             # Sum all costs to generate final cost
             cost = sum(costs.values())
         else:
             # If measurement came back None, give max penalty
-            print("Max penalty")
             cost = 1000
+
+        logging.info(f'Cost is {cost}')
 
         if not(self._no_learn):
             # Inform VW of what happened so we can learn from it
-            vw_format = self._vw.parse(self._to_vw_example_format(context, (model_config, cost, prob)), pyvw.vw.lContextualBandit)
+            vw_format = self._vw.parse(self._to_vw_example_format(context, (cost, prob)), pyvw.vw.lContextualBandit)
             # Learn
             self._vw.learn(vw_format)
             # Let VW know you're done with these objects
@@ -140,58 +163,63 @@ class RunSearchCB():
         """
 
         if cb_label is not None:
-            chosen_model_config, cost, prob = cb_label
+            cost, prob = cb_label
 
         chosen_model_sweep = self._user_model_config_sweeps[self._active_model_config_index]
 
         # Generate context string
         context_string = ""
         for k, v in context.items():
-            context_string += k
-            if type(v) == int or type(v) == float:
-                context_string += ":{} ".format(v)
+            context_string += k.replace('-', '_')
+            
+            if (type(v) == int or type(v) == float) and self._encode_context_numeric:
+                context_string += f':{v} '
             else:
-                context_string += "={} ".format(v)
+                # Here we always use '=' to encode as a string, as opposed to ':' which
+                # encodes numeric values. It seems avg loss is better this way
+                context_string += f'={v} '
 
         action_string = ""
         if self._adf:
             # Generate adf formatted cb data
-            action_string += "shared |Context {}\n".format(context_string)
+            action_string += f'shared |Context {context_string}\n'
             for model_sweep in self._user_model_config_sweeps:
                 if cb_label is not None and model_sweep == chosen_model_sweep:
-                    action_string += "0:{}:{} ".format(cost, prob)
+                    action_string += f'0:{cost}:{prob} '
 
-                action_string += "|Action "
+                delimiter = ':' if self._encode_actions_numeric else '='
+                action_string += f'|Action '
                 for k, v in model_sweep.items():
                     if k == 'max_batch_size':
                         action_string += k
-                        action_string += ":{} ".format(v)
+                        action_string += f'{delimiter}{v} '
                     if k == 'dynamic_batching':
                         for k, v in v.items():
                             if k == 'preferred_batch_size':
                                 action_string += k
-                                action_string += ":{} ".format(v[0])
+                                action_string += f'{delimiter}{v[0]} '
                             if k == 'max_queue_delay_microseconds':
                                 action_string += k
-                                action_string += ":{} ".format(v)
+                                action_string += f'{delimiter}{v} '
                     if k == 'instance_group':
                         for instance_group in v:
                             if instance_group['kind'] == 'KIND_CPU':
                                 action_string += 'cpu_instances'
-                                action_string += ":{} ".format(instance_group['count'])
+                                action_string += f'{delimiter}{instance_group["count"]} '
                             if instance_group['kind'] == 'KIND_GPU':
                                 action_string += 'gpu_instances'
-                                action_string += ":{} ".format(instance_group['count'])
+                                action_string += f'{delimiter}{instance_group["count"]} '
                 action_string += '\n'
 
         else:
             # Generate standard formatted cb data
             if cb_label is not None:
                 # VW doesn't allow model_config id of 0
-                action_string += "{}:{}:{} ".format(
-                    self._active_model_config_index + 1, cost, prob)
-            action_string += "| " + "{}\n".format(context_string)
+                action_string += f'{self._active_model_config_index + 1}:{cost}:{prob} '
+            action_string += '| ' + f'{context_string}\n'
+
         # Strip the last newline
+        logging.debug(action_string)
         return action_string[:-1]
 
     def _sample_custom_pmf(self, pmf):

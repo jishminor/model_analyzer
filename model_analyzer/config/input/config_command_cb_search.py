@@ -31,7 +31,10 @@ from .config_defaults import \
     DEFAULT_GPUS, DEFAULT_CB_SEARCH_ITERATIONS, DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT, \
     DEFAULT_MONITORING_INTERVAL, DEFAULT_OFFLINE_OBJECTIVES, DEFAULT_CB_SEARCH_ADF, \
     DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_SEARCH_EPSILON, DEFAULT_CB_SEARCH_CONTEXTS, \
-    DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE
+    DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE, DEFAULT_RUN_CONFIG_PREFERRED_BATCH_SIZE_DISABLE, \
+    DEFAULT_CB_SEARCH_EXPLORATION, DEFAULT_CB_SEARCH_TAU, DEFAULT_CB_SEARCH_POLICIES, \
+    DEFAULT_CB_SEARCH_LAMBDA, DEFAULT_CB_SEARCH_RND, DEFAULT_CB_SEARCH_ENCODE_CONTEXT_NUMERIC, \
+    DEFAULT_CB_SEARCH_ENCODE_ACTIONS_NUMERIC
 
 from .objects.config_model_profile_spec import ConfigModelProfileSpec
 from model_analyzer.triton.server.server_config import \
@@ -155,6 +158,13 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description=
                 "Max preferred batch size value that run config search should not go beyond that."
             ))
+        self._add_config(
+            ConfigField(
+                'run_config_search_preferred_batch_size_disable',
+                flags=['--run-config-search-preferred-batch-size-disable'],
+                field_type=ConfigPrimitive(bool),
+                default_value=DEFAULT_RUN_CONFIG_PREFERRED_BATCH_SIZE_DISABLE,
+                description="Disable preferred batch size search."))
 
         def objective_list_output_mapper(objectives):
             # Takes a list of objectives and maps them
@@ -271,6 +281,22 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description="Enable action dependent features for VW"))
         self._add_config(
             ConfigField(
+                'encode_context_numeric',
+                flags=['--encode-context-numeric'],
+                field_type=ConfigPrimitive(bool),
+                parser_args={'action': 'store_true'},
+                default_value=DEFAULT_CB_SEARCH_ENCODE_CONTEXT_NUMERIC,
+                description="Enable encoding of context values as numeric"))
+        self._add_config(
+            ConfigField(
+                'encode_actions_numeric',
+                flags=['--encode-actions-numeric'],
+                field_type=ConfigPrimitive(bool),
+                parser_args={'action': 'store_true'},
+                default_value=DEFAULT_CB_SEARCH_ENCODE_ACTIONS_NUMERIC,
+                description="Enable encoding of action values as numeric"))
+        self._add_config(
+            ConfigField(
                 'iterations',
                 flags=['--iterations'],
                 field_type=ConfigPrimitive(int),
@@ -278,11 +304,49 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description="Number of iterations for CB search"))
         self._add_config(
             ConfigField(
+                'exploration',
+                flags=['--exploration'],
+                choices=['epsilon', 'first', 'bag', 'cover', 'softmax', 'rnd'],
+                field_type=ConfigPrimitive(str),
+                default_value=DEFAULT_CB_SEARCH_EXPLORATION,
+                description=
+                'Exploration method for cb search (cover only available if adf disabled)'
+            ))
+        self._add_config(
+            ConfigField(
                 'epsilon',
                 flags=['--epsilon'],
                 field_type=ConfigPrimitive(float),
                 default_value=DEFAULT_CB_SEARCH_EPSILON,
                 description="Epsilon value for CB search"))
+        self._add_config(
+            ConfigField(
+                'tau',
+                flags=['--tau'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_CB_SEARCH_TAU,
+                description="Tau parameter for first search"))
+        self._add_config(
+            ConfigField(
+                'policies',
+                flags=['--policies'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_CB_SEARCH_POLICIES,
+                description="Num policy parameter for bag and cover search"))
+        self._add_config(
+            ConfigField(
+                'lambda_value',
+                flags=['--lambda'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_CB_SEARCH_LAMBDA,
+                description="Lambda value for softmax search"))
+        self._add_config(
+            ConfigField(
+                'rnd',
+                flags=['--rnd'],
+                field_type=ConfigPrimitive(int),
+                default_value=DEFAULT_CB_SEARCH_RND,
+                description="RND value for CB search using rnd"))
         self._add_config(
             ConfigField(
                 'no_learn',

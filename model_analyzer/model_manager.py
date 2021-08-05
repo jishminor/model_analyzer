@@ -259,6 +259,7 @@ class ModelManager:
                 context_file.close()
 
         for i in range(1, num_iterations + 1):
+            logging.info(f'Iteration: {i}')
             # Generate parameters for current round of evaluation
             if self._config.context_list:
                 concurrency = dictionary_list[i - 1]['concurrency-range']
@@ -281,7 +282,7 @@ class ModelManager:
 
             # Get predicted model_config and corresponding probability from vw based on the context passed
             model_config, prob = self._run_search_cb.get_vw_predicted_model_config(context)
-            logging.info('Context: {}, Action: {}, Prob: {}'.format(context, model_config.to_dict(), prob))
+            logging.info(f'Context: {context}, Action: {model_config.to_dict()}, Prob: {prob}')
 
             # Generate a perf analyzer config for this run using our context
             analyzer_config = self._config.get_all_config()
