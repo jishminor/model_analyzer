@@ -66,10 +66,14 @@ class NginxServerDocker(NginxServer):
 
         # Map ports, use config values but set to server defaults if not
         # specified
-        server_http_port = self._server_config.get_analyzer_config()['nginx_http_endpoint'].split(':')[-1]
-        server_grpc_port = self._server_config.get_analyzer_config()['nginx_grpc_endpoint'].split(':')[-1]
+        nginx_http_port = self._server_config.get_analyzer_config()['nginx_http_endpoint'].split(':')[-1]
+        nginx_grpc_port = self._server_config.get_analyzer_config()['nginx_grpc_endpoint'].split(':')[-1]
+        server_http_port = self._server_config.get_analyzer_config()['triton_http_endpoint'].split(':')[-1]
+        server_grpc_port = self._server_config.get_analyzer_config()['triton_grpc_endpoint'].split(':')[-1]
 
         ports = {
+            nginx_http_port: nginx_http_port,
+            nginx_grpc_port: nginx_grpc_port,
             server_http_port: server_http_port,
             server_grpc_port: server_grpc_port,
         }
@@ -90,8 +94,8 @@ class NginxServerDocker(NginxServer):
             if error.explanation.find('port is already allocated') != -1:
                 raise TritonModelAnalyzerException(
                     "One of the following port(s) are already allocated: "
-                    f"{server_http_port}, {server_grpc_port}, "
-                    "Change the Triton server ports using"
+                    f"{nginx_http_port}, {nginx_grpc_port}, {server_http_port}, {server_grpc_port} "
+                    "Change the Nginx server ports using"
                     " --nginx-http-endpoint, --nginx-grpc-endpoint,"
                     " and --nginx-metrics-endpoint flags.")
             else:
@@ -104,6 +108,9 @@ class NginxServerDocker(NginxServer):
                 self._log_pool.apply_async(self._logging_worker)
             except OSError as e:
                 raise TritonModelAnalyzerException(e)
+
+        logger.info('Docker Nginx Container started.')
+
 
     def _logging_worker(self):
         """
@@ -120,7 +127,7 @@ class NginxServerDocker(NginxServer):
         and cleans up docker client
         """
 
-        logger.info('Stopping nginx server.')
+        logger.info('Stopping nginx server container.')
 
         if self._nginx_container is not None:
             if self._log_path:
@@ -133,6 +140,7 @@ class NginxServerDocker(NginxServer):
             self._nginx_container.remove(force=True)
             self._nginx_container = None
             self._docker_client.close()
+
 
     def cpu_stats(self):
         """

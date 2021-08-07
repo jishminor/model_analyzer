@@ -319,10 +319,13 @@ class ModelManager:
             nginx_conf = NginxServerConfig(model_constraints, analyzer_config)
 
             # Start Nginx server with rate limits set appropriately
-            if analyzer_config['triton_launch_mode'] == 'local':
+            if analyzer_config['nginx_launch_mode'] == 'local':
                 nginx_server = NginxServerFactory.create_server_local(self._config.nginx_server_path, nginx_conf, self._config.nginx_output_path)
-            elif analyzer_config['triton_launch_mode'] == 'docker':
+            elif analyzer_config['nginx_launch_mode'] == 'docker':
                 nginx_server = NginxServerFactory.create_server_docker(self._config.nginx_docker_image, nginx_conf, self._config.nginx_output_path)
+            else:
+                raise TritonModelAnalyzerException(
+                    f"Unrecognized nginx-launch-mode : {analyzer_config['triton_launch_mode']}")
 
             nginx_server.start()
             self._server.start()
