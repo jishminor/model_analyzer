@@ -176,7 +176,7 @@ def get_cli_and_config_options():
         cli.add_subcommand(
             cmd='cb-search',
             help=
-            'Run model inference contextual bandit based configuration search based on specified CLI or config options.',
+            'Run contextual bandit based model configuration search based on specified CLI or config options.',
             config=config_cb_search)
         cli.add_subcommand(
             cmd='analyze',

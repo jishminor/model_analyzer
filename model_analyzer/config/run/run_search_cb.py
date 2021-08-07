@@ -17,6 +17,7 @@ from model_analyzer.config.input.objects.config_model_profile_spec \
 from model_analyzer.triton.model.model_config import ModelConfig
 import random
 import logging
+from copy import deepcopy
 
 from vowpalwabbit import pyvw
 
@@ -86,6 +87,9 @@ class RunSearchCB():
     def get_model_name(self):
         return self._model.model_name()
 
+    def get_model_objectives(self):
+        return deepcopy(self._model.objectives())
+
     def get_vw_predicted_model_config(self, context):
         """
         Fetch the run config from the VW predicted best model_config
@@ -129,7 +133,7 @@ class RunSearchCB():
 
         return model_config
 
-    def register_cost(self, model_config, context, prob, measurement):
+    def register_cost(self, context, prob, measurement):
         """
         Register cost of measurement generated from profiling model with VW
         Cost is measured as delta from objectives

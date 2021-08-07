@@ -26,15 +26,7 @@ from .config_enum import ConfigEnum
 from .config_command import ConfigCommand
 from .config_command_profile import ConfigCommandProfile
 
-from .config_defaults import \
-    DEFAULT_CHECKPOINT_DIRECTORY, DEFAULT_DURATION_SECONDS, DEFAULT_RUN_CONFIG_MAX_CONCURRENCY, \
-    DEFAULT_GPUS, DEFAULT_CB_SEARCH_ITERATIONS, DEFAULT_RUN_CONFIG_MAX_INSTANCE_COUNT, \
-    DEFAULT_MONITORING_INTERVAL, DEFAULT_OFFLINE_OBJECTIVES, DEFAULT_CB_SEARCH_ADF, \
-    DEFAULT_CB_SEARCH_NO_LEARN, DEFAULT_CB_SEARCH_EPSILON, DEFAULT_CB_SEARCH_CONTEXTS, \
-    DEFAULT_RUN_CONFIG_MAX_PREFERRED_BATCH_SIZE, DEFAULT_RUN_CONFIG_PREFERRED_BATCH_SIZE_DISABLE, \
-    DEFAULT_CB_SEARCH_EXPLORATION, DEFAULT_CB_SEARCH_TAU, DEFAULT_CB_SEARCH_POLICIES, \
-    DEFAULT_CB_SEARCH_LAMBDA, DEFAULT_CB_SEARCH_RND, DEFAULT_CB_SEARCH_ENCODE_CONTEXT_NUMERIC, \
-    DEFAULT_CB_SEARCH_ENCODE_ACTIONS_NUMERIC
+from .config_defaults import *
 
 from .objects.config_model_profile_spec import ConfigModelProfileSpec
 from model_analyzer.triton.server.server_config import \
@@ -103,6 +95,66 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
         self._add_cb_search_models_configs()
         self._add_perf_analyzer_configs()
         self._add_triton_configs()
+        self._add_nginx_configs()
+
+    def _add_nginx_configs(self):
+        """
+        Adds the nginx related flags
+        and config options
+        """
+
+        self._add_config(
+            ConfigField(
+                'nginx_launch_mode',
+                field_type=ConfigPrimitive(str),
+                flags=['--nginx-launch-mode'],
+                default_value=DEFAULT_NGINX_LAUNCH_MODE,
+                choices=['local', 'docker'],
+                description="The method by which to launch Nginx Server. "
+                "'local' assumes nginx binary is available locally. "
+                "'docker' pulls and launches a nginx docker container with "
+                "the specified version."))
+        self._add_config(
+            ConfigField('nginx_docker_image',
+                        flags=['--nginx-docker-image'],
+                        field_type=ConfigPrimitive(str),
+                        default_value=DEFAULT_NGINX_DOCKER_IMAGE,
+                        description='NGINX Server Docker image tag'))
+        self._add_config(
+            ConfigField(
+                'nginx_http_endpoint',
+                flags=['--nginx-http-endpoint'],
+                field_type=ConfigPrimitive(str),
+                default_value=DEFAULT_NGINX_HTTP_ENDPOINT,
+                description=
+                "Triton Server HTTP endpoint url used by Model Analyzer client. "
+                "Will be ignored if server-launch-mode is not 'remote'"))
+        self._add_config(
+            ConfigField(
+                'nginx_grpc_endpoint',
+                flags=['--nginx-grpc-endpoint'],
+                field_type=ConfigPrimitive(str),
+                default_value=DEFAULT_NGINX_GRPC_ENDPOINT,
+                description=
+                "Triton Server GRPC endpoint url used by Model Analyzer client. "
+                "Will be ignored if server-launch-mode is not 'remote'"))
+        self._add_config(
+            ConfigField(
+                'nginx_server_path',
+                field_type=ConfigPrimitive(str),
+                flags=['--nginx-server-path'],
+                default_value=DEFAULT_NGINX_SERVER_PATH,
+                description='The full path to the nginxserver binary executable'
+            ))
+        self._add_config(
+            ConfigField(
+                'nginx_output_path',
+                field_type=ConfigPrimitive(str),
+                flags=['--nginx-output-path'],
+                description=
+                ('The full path to the file to which Triton server instance will '
+                 'append their log output. If not specified, they are not written.'
+                )))
 
     def _add_cb_search_models_configs(self):
         """

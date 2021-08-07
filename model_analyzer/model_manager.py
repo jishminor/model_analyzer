@@ -19,6 +19,10 @@ from model_analyzer.config.run.run_search import RunSearch
 from model_analyzer.config.run.run_search_cb import RunSearchCB
 from model_analyzer.config.run.run_config_generator \
     import RunConfigGenerator
+from model_analyzer.triton.nginx.server_factory import NginxServerFactory
+from model_analyzer.triton.nginx.server_config import NginxServerConfig
+
+
 from model_analyzer.config.run.run_config import RunConfig
 
 
@@ -286,15 +290,19 @@ class ModelManager:
             model_config, prob = self._run_search_cb.get_vw_predicted_model_config(context)
             logging.info(f'Context: {context}, Action: {model_config.to_dict()}, Prob: {prob}')
 
+            # Get the name of the selected model instance
+            current_model_instance_name = model_config.get_field('name')
+
             # Generate a perf analyzer config for this run using our context
             analyzer_config = self._config.get_all_config()
+
             perf_config = PerfAnalyzerConfig()
             perf_config_params = {
                 'protocol': analyzer_config['client_protocol'],
                 'url': 
-                    analyzer_config['triton_http_endpoint']
+                    analyzer_config['nginx_http_endpoint']
                     if analyzer_config['client_protocol'] == 'http' else
-                    analyzer_config['triton_grpc_endpoint']
+                    analyzer_config['nginx_grpc_endpoint']
                 ,
                 'measurement-mode': 'count_windows'
             }
@@ -302,14 +310,27 @@ class ModelManager:
 
             # This sets the concurrency, batch size, and model name for the the requests
             perf_config.update_config(context)
-            perf_config.update_config({'model-name': model_config.get_field('name')})
+            perf_config.update_config({'model-name': current_model_instance_name})
 
-            # Start server, and load model variant based on the predicted model_config
+            # Start Triton and Nginx server, and load model variant based on the predicted model_config
+            # Create config object for Nginx server
+            model_constraints = {}
+            model_constraints[current_model_instance_name] = self._run_search_cb.get_model_objectives()
+            nginx_conf = NginxServerConfig(model_constraints, analyzer_config)
+
+            # Start Nginx server with rate limits set appropriately
+            if analyzer_config['triton_launch_mode'] == 'local':
+                nginx_server = NginxServerFactory.create_server_local(self._config.nginx_server_path, nginx_conf, self._config.nginx_output_path)
+            elif analyzer_config['triton_launch_mode'] == 'docker':
+                nginx_server = NginxServerFactory.create_server_docker(self._config.nginx_docker_image, nginx_conf, self._config.nginx_output_path)
+
+            nginx_server.start()
             self._server.start()
             if not self._create_and_load_model_variant(
                     original_name=self._run_search_cb.get_model_name(),
                     variant_config=model_config):
                 self._server.stop()
+                nginx_server.stop()
                 continue
 
             # Profile various batch size and concurrency values.
@@ -321,7 +342,7 @@ class ModelManager:
             # Generate RunConfig from model_config and perf_config
             run_config = RunConfig(self._run_search_cb.get_model_name(), model_config, perf_config)
 
-            logging.info(f"Profiling model {model_config.get_field('name')}...")
+            logging.info(f"Profiling model {current_model_instance_name}...")
 
             # Only profile model if request batch size is <= max batch size for model
             if int(context['batch-size']) <= int(model_config.to_dict()['maxBatchSize']):
@@ -331,9 +352,10 @@ class ModelManager:
                 measurement = None
 
             # Register cost with CB learner
-            self._run_search_cb.register_cost(model_config, context, prob, measurement)
+            self._run_search_cb.register_cost(context, prob, measurement)
 
             self._server.stop()
+            nginx_server.stop()
 
     def _create_and_load_model_variant(self, original_name, variant_config):
         """
