@@ -58,8 +58,8 @@ class NginxServerDocker(NginxServer):
 
         # Mount required directories
         volumes = {
-            '/etc/nginx/triton-nginx.conf': {
-                'bind': '/etc/nginx/triton-nginx.conf',
+            self._server_config.get_config_path(): {
+                'bind': self._server_config.get_config_path(),
                 'mode': 'ro'
             }
         }
