@@ -118,7 +118,7 @@ class Analyzer:
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 
-    def cb_search(self, client):
+    def cb_search(self, client, nginx):
         """
         Subcommand: CB_SEARCH
 
@@ -128,6 +128,8 @@ class Analyzer:
         ----------
         client : TritonClient
             Instance used to load/unload models
+        nginx : NginxServer
+            Nginx Instance to proxy triton api requests
         
         Raises
         ------
@@ -152,6 +154,7 @@ class Analyzer:
             config=self._config,
             client=client,
             server=self._server,
+            nginx=nginx,
             result_manager=self._result_manager,
             metrics_manager=self._metrics_manager,
             state_manager=self._state_manager)

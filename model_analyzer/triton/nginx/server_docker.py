@@ -56,7 +56,12 @@ class NginxServerDocker(NginxServer):
         Starts the nginx docker container using docker-py
         """
 
+        # Generate the nginx config to mount in the container
+        with open(self._server_config.get_config_path(), 'w+') as output_file_:
+            output_file_.write(self._server_config.get_nginx_config())
+
         # Mount required directories
+        # TODO: config path should not be set to host nginx, should be other
         volumes = {
             self._server_config.get_config_path(): {
                 'bind': self._server_config.get_config_path(),

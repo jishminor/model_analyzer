@@ -38,14 +38,15 @@ class NginxServer(ABC):
         Returns the CPU memory usage and CPU available memory in MB
         """
 
-    def update_config(self, params):
+    def update_config(self, model_constraints):
         """
-        Update the server's arguments
+        Update the nginx config file
 
         Parameters
         ----------
-        params: dict
+        model_constraints: dict
             keys are argument names and values are their values.
         """
 
-        self._server_config.update_config(params)
+        self._server_config.set_model_constraints(model_constraints)
+        self._server_config.update_nginx_config()

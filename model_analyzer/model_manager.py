@@ -39,7 +39,7 @@ class ModelManager:
     It also records the best results for each model.
     """
     def __init__(self, config, client, server, metrics_manager, result_manager,
-                 state_manager):
+                 state_manager, nginx=None):
         """
         Parameters
         ----------
@@ -55,6 +55,8 @@ class ModelManager:
             The object that handles storing and sorting the results from the perf analyzer
         state_manager: AnalyzerStateManager
             The object that handles serializing the state of the analyzer and saving.
+        nginx : NginxServer
+            Nginx Instance to proxy triton api requests
         """
 
         self._config = config
@@ -67,6 +69,7 @@ class ModelManager:
         self._last_config_variant = None
         self._run_config_generator = RunConfigGenerator(config=config,
                                                         client=self._client)
+        self._nginx = nginx
 
         # Generate the output model repository path folder.
         self._output_model_repo_path = config.output_model_repository_path
@@ -293,9 +296,9 @@ class ModelManager:
             # Get the name of the selected model instance
             current_model_instance_name = model_config.get_field('name')
 
-            # Generate a perf analyzer config for this run using our context
             analyzer_config = self._config.get_all_config()
 
+            # Generate a perf analyzer config for this run using our context
             perf_config = PerfAnalyzerConfig()
             perf_config_params = {
                 'protocol': analyzer_config['client_protocol'],
@@ -313,27 +316,22 @@ class ModelManager:
             perf_config.update_config({'model-name': current_model_instance_name})
 
             # Start Triton and Nginx server, and load model variant based on the predicted model_config
-            # Create config object for Nginx server
+            # Update config object for Nginx server
             model_constraints = {}
             model_constraints[current_model_instance_name] = self._run_search_cb.get_model_objectives()
-            nginx_conf = NginxServerConfig(model_constraints, analyzer_config)
+            if 'perf_throughput' in model_constraints[current_model_instance_name].keys():
+                # Need to divide perf_throughput by request batch size for nginx rate limiting
+                # to account for requests/sec (nginx) vs inferences/sec (triton) difference
+                model_constraints[current_model_instance_name]['perf_throughput'] = int(model_constraints[current_model_instance_name]['perf_throughput'] / request_batch_size)
+            self._nginx.update_config(model_constraints)
 
-            # Start Nginx server with rate limits set appropriately
-            if analyzer_config['nginx_launch_mode'] == 'local':
-                nginx_server = NginxServerFactory.create_server_local(self._config.nginx_server_path, nginx_conf, self._config.nginx_output_path)
-            elif analyzer_config['nginx_launch_mode'] == 'docker':
-                nginx_server = NginxServerFactory.create_server_docker(self._config.nginx_docker_image, nginx_conf, self._config.nginx_output_path)
-            else:
-                raise TritonModelAnalyzerException(
-                    f"Unrecognized nginx-launch-mode : {analyzer_config['triton_launch_mode']}")
-
-            nginx_server.start()
+            self._nginx.start()
             self._server.start()
             if not self._create_and_load_model_variant(
                     original_name=self._run_search_cb.get_model_name(),
                     variant_config=model_config):
                 self._server.stop()
-                nginx_server.stop()
+                self._nginx.stop()
                 continue
 
             # Profile various batch size and concurrency values.
@@ -358,7 +356,7 @@ class ModelManager:
             self._run_search_cb.register_cost(context, prob, measurement)
 
             self._server.stop()
-            nginx_server.stop()
+            self._nginx.stop()
 
     def _create_and_load_model_variant(self, original_name, variant_config):
         """

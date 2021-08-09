@@ -25,83 +25,81 @@ class NginxServerConfig:
 
     nginx_conf_template = '''
     
-    worker_processes auto;
-    pid /run/nginx.pid;
-    events {
-            worker_connections 768;
-    }
-    http {
-            #### BEGIN: Stuff from the default nginx.conf ####
-            tcp_nopush on;
-            tcp_nodelay on;
-            keepalive_timeout 70;  # Bumped from 65
-            types_hash_max_size 2048;
-            include /etc/nginx/mime.types;
-            default_type application/octet-stream;
-            ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
-            ssl_prefer_server_ciphers on;
-            access_log /var/log/nginx/access.log;
-            error_log /var/log/nginx/error.log;
-            #### END Stuff from the default nginx.conf ####
-            gzip on;
-            ################
-            # TritonServer #
-            ################
-            
-            # Enable rate limiting
-            {% for k,v in model_constraints.items() %}
-            limit_req_zone $binary_remote_addr zone={{ k }}_limit:4m rate={{ v['perf_throughput'] }}r/s;
-            {% endfor %}
+worker_processes auto;
+pid /run/nginx.pid;
+daemon off;
+events {
+        worker_connections 768;
+}
+http {
+        #### BEGIN: Stuff from the default nginx.conf ####
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 70;  # Bumped from 65
+        types_hash_max_size 2048;
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+        ssl_prefer_server_ciphers on;
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log;
+        #### END Stuff from the default nginx.conf ####
+        gzip on;
+        
+        # Enable rate limiting
+        {% for k,v in model_constraints.items() %}
+        limit_req_zone $binary_remote_addr zone={{ k }}_limit:4m rate={{ v['perf_throughput'] }}r/s;
+        {% endfor %}
 
-            server {
-                    listen {{ analyzer_config['nginx_http_endpoint'].split(':')[-1] }} default_server;
-                    listen [::]:{{ analyzer_config['nginx_http_endpoint'].split(':')[-1] }} default_server;
-                    server_name tritonserver;
-                    
-                    # Reverse-proxy to tritonserver
-                    location / {
-                            proxy_pass        http://{{ analyzer_config['triton_http_endpoint'] }};
-                    }
+        server {
+                listen {{ analyzer_config['nginx_http_endpoint'].split(':')[-1] }} default_server;
+                listen [::]:{{ analyzer_config['nginx_http_endpoint'].split(':')[-1] }} default_server;
+                server_name tritonserver;
+                
+                # Reverse-proxy to tritonserver
+                location / {
+                        proxy_pass        http://{{ analyzer_config['triton_http_endpoint'] }};
+                }
 
-                    {% for k,v in model_constraints.items() %}
-                    location /v2/models/{{ k }}/infer {
-                            proxy_pass        http://{{ analyzer_config['triton_http_endpoint'] }}/v2/models/{{ k }}/infer;
-                            limit_req         zone={{ k }}_limit burst=20;
-                            client_max_body_size 100M; # This needs to be set dynamically based on request size
-                    }
-                    {% endfor %}
-            }
+                {% for k,v in model_constraints.items() %}
+                location /v2/models/{{ k }}/infer {
+                        proxy_pass        http://{{ analyzer_config['triton_http_endpoint'] }}/v2/models/{{ k }}/infer;
+                        limit_req         zone={{ k }}_limit burst=20;
+                        client_max_body_size 100M; # This needs to be set dynamically based on (request size * batch size)
+                }
+                {% endfor %}
+        }
 
-            server {
-                    listen {{ analyzer_config['nginx_grpc_endpoint'].split(':')[-1] }} http2 default_server;
-                    listen [::]:{{ analyzer_config['nginx_grpc_endpoint'].split(':')[-1] }} http2 default_server;
-                    server_name tritonservergrpc;
-                    proxy_buffering off;
+        server {
+                listen {{ analyzer_config['nginx_grpc_endpoint'].split(':')[-1] }} http2 default_server;
+                listen [::]:{{ analyzer_config['nginx_grpc_endpoint'].split(':')[-1] }} http2 default_server;
+                server_name tritonservergrpc;
+                proxy_buffering off;
 
-                    # Reverse-proxy to tritonserver
-                    location /inference.GRPCInferenceService {
-                            grpc_pass         grpc://inference_service;
-                    }
+                # Reverse-proxy to tritonserver
+                location /inference.GRPCInferenceService {
+                        grpc_pass         grpc://inference_service;
+                }
 
-                    location /inference.GRPCInferenceService/ModelInfer {
-                            grpc_pass         grpc://inference_service;
-                            {% for k,v in model_constraints.items() %}
-                            limit_req         zone={{ k }}_limit burst=20;
-                            {% endfor %}
-                            client_max_body_size 100M;
-                    }
-            }
+                location /inference.GRPCInferenceService/ModelInfer {
+                        grpc_pass         grpc://inference_service;
+                        {% for k,v in model_constraints.items() %}
+                        limit_req         zone={{ k }}_limit burst=20;
+                        {% endfor %}
+                        client_max_body_size 100M;
+                }
+        }
 
-            # Backend gRPC servers
-            #
-            upstream inference_service {
-                    zone inference_service 64k;
-                    server {{ analyzer_config['triton_grpc_endpoint'] }};
-            }
-    }
+        # Backend gRPC servers
+        #
+        upstream inference_service {
+                zone inference_service 64k;
+                server {{ analyzer_config['triton_grpc_endpoint'] }};
+        }
+}
     '''
 
-    def __init__(self, model_constraints, analyzer_config, config_path='/etc/nginx/triton-nginx.conf'):
+    def __init__(self, model_constraints = {}, analyzer_config = {}, config_path='/etc/nginx/triton-nginx.conf'):
         """
         Construct NginxServerConfig
         """
@@ -110,23 +108,34 @@ class NginxServerConfig:
         self._model_constraints = model_constraints
         self._analyzer_config = analyzer_config
         self._config_path = config_path
+        self._current_config_text = ''
 
-    def to_nginx_config(self):
+    def update_nginx_config(self):
         """
-        Utility function to convert a config into an nginx config
-
-        Returns
-        -------
-        str
-            the file contents of the nginx config.
+        Utility function to convert a config into an nginx config and 
+        write out to nginx config file
         """
 
         template = Template(self.nginx_conf_template, trim_blocks=True,
                             lstrip_blocks=True, keep_trailing_newline=True)
-        return template.render(model_constraints=self._model_constraints, analyzer_config=self._analyzer_config)
+        self._current_config_text = template.render(model_constraints=self._model_constraints, analyzer_config=self._analyzer_config)
 
     def get_config_path(self):
         return self._config_path
 
+    def get_nginx_config(self):
+        return self._current_config_text
+
     def get_analyzer_config(self):
         return self._analyzer_config
+
+    def set_analyzer_config(self, analyzer_config):
+        self._analyzer_config = analyzer_config
+
+    def get_model_constraints(self):
+        return self._model_constraints
+
+    def set_model_constraints(self, model_constraints):
+        self._model_constraints = model_constraints
+
+    

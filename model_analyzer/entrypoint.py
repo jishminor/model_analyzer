@@ -17,6 +17,8 @@ from .cli.cli import CLI
 from .model_analyzer_exceptions import TritonModelAnalyzerException
 from .triton.server.server_factory import TritonServerFactory
 from .triton.server.server_config import TritonServerConfig
+from .triton.nginx.server_factory import NginxServerFactory
+from .triton.nginx.server_config import NginxServerConfig
 from .triton.client.client_factory import TritonClientFactory
 from .state.analyzer_state_manager import AnalyzerStateManager
 from .config.input.config_command_profile import ConfigCommandProfile
@@ -119,6 +121,37 @@ def get_server_handle(config):
     else:
         raise TritonModelAnalyzerException(
             f"Unrecognized triton-launch-mode : {config.triton_launch_mode}")
+
+    return server
+
+def get_nginx_handle(config):
+    """
+    Creates and returns a NginxServer
+    with specified arguments
+
+    Parameters
+    ----------
+    config : namespace
+        Arguments parsed from the CLI
+    """
+
+    if config.nginx_launch_mode == 'local':
+        nginx_config = NginxServerConfig(analyzer_config=config)
+        logging.info('Creating a local Nginx Server...')
+        server = NginxServerFactory.create_server_local(
+            path=config.nginx_server_path,
+            config=nginx_config,
+            log_path=config.nginx_output_path)
+    elif config.nginx_launch_mode == 'docker':
+        nginx_config = NginxServerConfig(analyzer_config=config)
+        logging.info('Starting a Nginx Server using docker...')
+        server = NginxServerFactory.create_server_docker(
+            image=config.nginx_docker_image,
+            config=nginx_config,
+            log_path=config.nginx_output_path)
+    else:
+        raise TritonModelAnalyzerException(
+            f"Unrecognized nginx-launch-mode : {config.nginx_launch_mode}")
 
     return server
 
@@ -251,6 +284,7 @@ def main():
     state_manager = AnalyzerStateManager(config=config)
 
     server = None
+    nginx = None
     try:
         # Make calls to correct analyzer subcommand functions
         if args.subcommand == 'profile':
@@ -271,13 +305,14 @@ def main():
             create_output_model_repository(config)
 
             client, server = get_triton_handles(config)
+            nginx = get_nginx_handle(config)
 
             # Only check for exit after the events that take a long time.
             if state_manager.exiting():
                 return
 
             analyzer = Analyzer(config, server, state_manager)
-            analyzer.cb_search(client=client)
+            analyzer.cb_search(client=client, nginx=nginx)
 
         elif args.subcommand == 'analyze':
 
@@ -290,6 +325,8 @@ def main():
     finally:
         if server is not None:
             server.stop()
+        if nginx is not None:
+            nginx.stop()
 
 
 if __name__ == '__main__':
