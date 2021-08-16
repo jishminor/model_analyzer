@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ class Analyzer:
     model_analyzer. Configured with metrics to monitor, exposes profiling and
     result writing methods.
     """
+
     def __init__(self, config, server, state_manager):
         """
         Parameters
@@ -175,7 +176,7 @@ class Analyzer:
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 
-    def analyze(self, mode):
+    def analyze(self, mode, quiet):
         """
         subcommand: ANALYZE
 
@@ -186,6 +187,8 @@ class Analyzer:
         ----------
         mode : str
             Global mode that the analyzer is running on
+        quiet: bool
+            Whether to mute writing table to console
         """
 
         if not isinstance(self._config, ConfigCommandAnalyze):
@@ -193,8 +196,7 @@ class Analyzer:
                 f"Expected config of type {ConfigCommandAnalyze}, got {type(self._config)}."
             )
 
-        gpu_info = self._state_manager.get_state_variable(
-            'MetricsManager.gpus')
+        gpu_info = self._state_manager.get_state_variable('MetricsManager.gpus')
         if not gpu_info:
             gpu_info = {}
         self._report_manager = ReportManager(
@@ -204,11 +206,7 @@ class Analyzer:
             result_manager=self._result_manager)
 
         # Create result tables, put top results and get stats
-        dcgm_metrics, perf_metrics, cpu_metrics = \
-            MetricsManager.categorize_metrics()
-        self._result_manager.create_tables(
-            gpu_specific_metrics=dcgm_metrics,
-            non_gpu_specific_metrics=perf_metrics + cpu_metrics)
+        self._result_manager.create_tables()
         self._result_manager.compile_and_sort_results()
         if self._config.summarize:
             self._report_manager.create_summaries()
@@ -216,7 +214,9 @@ class Analyzer:
 
         # Dump to tables and write to disk
         self._result_manager.tabulate_results()
-        self._result_manager.write_and_export_results()
+        self._result_manager.export_results()
+        if not quiet:
+            self._result_manager.write_results()
 
     def report(self, mode):
         """
@@ -236,8 +236,7 @@ class Analyzer:
                 f"Expected config of type {ConfigCommandReport}, got {type(self._config)}."
             )
 
-        gpu_info = self._state_manager.get_state_variable(
-            'MetricsManager.gpus')
+        gpu_info = self._state_manager.get_state_variable('MetricsManager.gpus')
         if not gpu_info:
             gpu_info = {}
         self._report_manager = ReportManager(

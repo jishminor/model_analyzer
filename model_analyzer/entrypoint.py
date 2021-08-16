@@ -95,7 +95,8 @@ def get_server_handle(config):
         triton_config['model-repository'] = config.output_model_repository_path
         triton_config['http-port'] = config.triton_http_endpoint.split(':')[-1]
         triton_config['grpc-port'] = config.triton_grpc_endpoint.split(':')[-1]
-        triton_config['metrics-port'] = urlparse(config.triton_metrics_url).port
+        triton_config['metrics-port'] = urlparse(
+            config.triton_metrics_url).port
         triton_config['model-control-mode'] = 'explicit'
         logging.info('Starting a local Triton Server...')
         server = TritonServerFactory.create_server_local(
@@ -110,14 +111,16 @@ def get_server_handle(config):
             config.output_model_repository_path)
         triton_config['http-port'] = config.triton_http_endpoint.split(':')[-1]
         triton_config['grpc-port'] = config.triton_grpc_endpoint.split(':')[-1]
-        triton_config['metrics-port'] = urlparse(config.triton_metrics_url).port
+        triton_config['metrics-port'] = urlparse(
+            config.triton_metrics_url).port
         triton_config['model-control-mode'] = 'explicit'
         logging.info('Starting a Triton Server using docker...')
         server = TritonServerFactory.create_server_docker(
             image=config.triton_docker_image,
             config=triton_config,
             gpus=config.gpus,
-            log_path=config.triton_output_path)
+            log_path=config.triton_output_path,
+            mounts=config.triton_docker_mounts)
     else:
         raise TritonModelAnalyzerException(
             f"Unrecognized triton-launch-mode : {config.triton_launch_mode}")
@@ -216,9 +219,10 @@ def get_cli_and_config_options():
             help=
             'Collect and sort profiling results and generate data and summaries.',
             config=config_analyze)
-        cli.add_subcommand(cmd='report',
-                           help='Generate detailed reports for a single config',
-                           config=config_report)
+        cli.add_subcommand(
+            cmd='report',
+            help='Generate detailed reports for a single config',
+            config=config_report)
         return cli.parse()
 
     except TritonModelAnalyzerException as e:
@@ -281,7 +285,6 @@ def main():
 
     args, config = get_cli_and_config_options()
     setup_logging(args)
-    state_manager = AnalyzerStateManager(config=config)
 
     server = None
     nginx = None
@@ -292,6 +295,7 @@ def main():
             create_output_model_repository(config)
 
             client, server = get_triton_handles(config)
+            state_manager = AnalyzerStateManager(config=config, server=server)
 
             # Only check for exit after the events that take a long time.
             if state_manager.exiting():
@@ -316,11 +320,15 @@ def main():
 
         elif args.subcommand == 'analyze':
 
-            analyzer = Analyzer(config, server, state_manager)
-            analyzer.analyze(mode=args.mode)
+            analyzer = Analyzer(
+                config, server,
+                AnalyzerStateManager(config=config, server=server))
+            analyzer.analyze(mode=args.mode, quiet=bool(args.quiet))
         elif args.subcommand == 'report':
 
-            analyzer = Analyzer(config, server, state_manager)
+            analyzer = Analyzer(
+                config, server,
+                AnalyzerStateManager(config=config, server=server))
             analyzer.report(mode=args.mode)
     finally:
         if server is not None:

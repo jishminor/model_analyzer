@@ -1,5 +1,5 @@
 <!--
-Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2020-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -86,6 +86,9 @@ profile_models: <comma-delimited-string-list>
 # Duration of waiting time between each metric measurement in seconds
 [ monitoring_interval: <float> | default: 1 ]
 
+# Specifies which metric(s) are to be collected.
+[ collect_cpu_metrics: <bool> | default: false ]
+
 # The protocol used to communicate with the Triton Inference Server. Only 'http' and 'grpc' are allowed for the values.
 [ client_protocol: <string> | default: grpc ]
 
@@ -126,6 +129,10 @@ profile_models: <comma-delimited-string-list>
 
 # The full path to a file to write the Triton Server output log.
 [ triton_output_path: <string> ]
+
+# List of strings containing the paths to the volumes to be mounted into the tritonserver docker 
+# containers launched by model-analyzer. Will be ignored in other launch modes
+[ triton_docker_mounts: <list of strings> ]
 
 # How Model Analyzer will launch triton. It should
 # be either "docker", "local", or "remote".
@@ -173,7 +180,11 @@ profile_models: <comma-delimited-string-list|list|profile_model>
 [ triton_server_flags: <dict> ]
 
 # Allows custom configuration of perf analyzer instances used by model analyzer
-[ perf_analyzer_flags: <dict>]
+[ perf_analyzer_flags: <dict> ]
+
+# Allows custom configuration of the environment variables for tritonserver instances
+# launched by model analyzer
+[ triton_server_environment: <dict> ]
 ```
 
 ## Config Options for `analyze`
@@ -215,13 +226,13 @@ analysis_models: <comma-delimited-string-list>
 [ filename_server_only: <string> | default: metrics-server-only.csv ]
 
 # Specifies columns keys for model inference metrics table
-[ inference_output_fields: <comma-delimited-string-list> | default: See Config Defaults section]
+[ inference_output_fields: <comma-delimited-string-list> | default: See [Config Defaults](#config-defaults) section]
 
 # Specifies columns keys for model gpu metrics table
-[ gpu_output_fields: <comma-delimited-string-list> | default: See Config Defaults section]
+[ gpu_output_fields: <comma-delimited-string-list> | default: See [Config Defaults](#config-defaults) section]
 
 # Specifies columns keys for server only metrics table
-[ server_output_fields: <comma-delimited-string-list> | default: See Config Defaults section]
+[ server_output_fields: <comma-delimited-string-list> | default: See [Config Defaults](#config-defaults) section]
 
 # Shorthand that allows a user to specify a max latency constraint in ms
 [ latency_budget: <int>]
@@ -280,7 +291,7 @@ The following config options are support by the YAML config file only.
 report_model_configs: <comma-delimited-string-list|list|report_model_config>
 
 # yaml sections to configure the plots that should be shown in the detaild report
-[ plots: <dict-plot-configs> | default: See Config Defaults section ]
+[ plots: <dict-plot-configs> | default: See [Config Defaults](#config-defaults) section ]
 
 ```
 
@@ -680,6 +691,45 @@ profile_models:
   arguments in this section. An example of this is `http-port`, which is an
   argument to Model Analyzer itself.
 
+### `<triton-server-environment>`
+
+This section enables setting environment variables for the tritonserver
+instances launched by Model Analyzer. For example, when a custom operation is 
+required by a model, Triton requires the LD_PRELOAD and LD_LIBRARY_PATH 
+environment variables to be set. See [this link](https://github.com/triton-inference-server/server/blob/main/docs/custom_operations.md) 
+for details. The value for this section is a dictionary where the
+keys are the environment variable names and their values are the values to be
+set.
+
+#### Example
+
+```yaml
+model_repository: /path/to/model/repository/
+profile_models:
+  - model_1
+triton_server_environment:
+  LD_PRELOAD: /path/to/custom/op/.so
+  LD_LIBRARY_PATH: /path/to/shared/libararies
+
+```
+
+Since Model Analyzer relaunches Triton Server each time a model config is
+loaded, you can also specify `triton_server_environment` on a per model basis. For
+example:
+
+```yaml
+model_repository: /path/to/model/repository/
+profile_models:
+  model_1:
+    triton_server_environment:
+        LD_PRELOAD: /path/to/custom/op
+```
+
+**Important Notes**: 
+* The Model Analyzer also provides certain environment variables to the `tritonserver`
+  instances it launches. These ***cannot*** be overriden by providing those
+  arguments in this section. An example of this is `CUDA_VISIBLE_DEVICES`.
+
 ### `<plots>`
 
 This section is used to specify the kind of plots that will be displayed in the
@@ -715,7 +765,7 @@ The `--profile-models` argument can be provided as a list of strings (names of
 models) from the CLI interface, or as a more complex `<profile-model>` object
 but only through the YAML configuration file. The model object can contain
 `<model-config-parameters>`, `<parameter>`,
-`<perf-analyzer-flags>`,`<triton-server-flags>` and a flag `cpu_only`.
+`<perf-analyzer-flags>`,`<triton-server-flags>`,`<triton-server-environment>` and a flag `cpu_only`.
 
 A profile model object puts together all the different parameters specified
 above. An example will look like:
