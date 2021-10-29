@@ -44,7 +44,7 @@ class NginxServerLocal(NginxServer):
         """
 
         self._nginx_process = None
-        self._server_config = config
+        self._nginx_config = config
         self._server_path = path
         self._log_path = log_path
 
@@ -55,11 +55,11 @@ class NginxServerLocal(NginxServer):
 
         if self._server_path:
             # Create nginx config and run subprocess
-            cmd = [self._server_path, '-c', self._server_config.get_config_path()]
+            cmd = [self._server_path, '-c', self._nginx_config.get_config_path()]
 
             # Write result to nginx config file
-            with open(self._server_config.get_config_path(), 'w+') as output_file_:
-                output_file_.write(self._server_config.get_nginx_config())
+            with open(self._nginx_config.get_config_path(), 'w+') as output_file_:
+                output_file_.write(self._nginx_config.get_nginx_config())
             
             if self._log_path:
                 try:

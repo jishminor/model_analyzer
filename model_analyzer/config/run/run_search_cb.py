@@ -15,6 +15,8 @@
 from model_analyzer.config.input.objects.config_model_profile_spec \
     import ConfigModelProfileSpec
 from model_analyzer.triton.model.model_config import ModelConfig
+from model_analyzer.result.constraint_manager import ConstraintManager
+
 import random
 import logging
 from copy import deepcopy
@@ -30,6 +32,7 @@ class RunSearchCB():
     def __init__(self, config, model, user_model_config_sweeps):
         self._user_model_config_sweeps = user_model_config_sweeps
         self._model = model
+        self._config = config
         self._no_learn = config.no_learn
         self._adf = config.adf
         self._encode_context_numeric = config.encode_context_numeric
@@ -123,7 +126,10 @@ class RunSearchCB():
         # Overwrite model config keys with values from model_sweep
         model_config_dict = model_config.get_config()
         for key, value in model_sweep.items():
-            if value is not None:
+            # Account for optimization params
+            if key is armnn:
+                 
+            elif value is not None:
                 model_config_dict[key] = value
         model_config = ModelConfig.create_from_dictionary(
             model_config_dict)
@@ -137,23 +143,40 @@ class RunSearchCB():
         """
         Register cost of measurement generated from profiling model with VW
         Cost is measured as delta from objectives
+
+        Cost is meausred as logical and of all contraints met * (sum of %diff of actual vs objectives)
         """
 
-        if measurement:
-            costs = {}
-            for key, value in self._model.objectives().items():
-                logging.info(f'Target: {key}, Desired: {value}, Achieved: {measurement.get_metric(key).value()}')
-                costs[key] = abs(measurement.get_metric(key).value() - value)
-
-            # Sum all costs to generate final cost
-            cost = sum(costs.values())
-        else:
-            # If measurement came back None, give max penalty
-            cost = 1000
-
-        logging.info(f'Cost is {cost}')
-
         if not(self._no_learn):
+            if measurement:
+                costs = {}
+
+                # Make sure all constraints were met
+                constraints = ConstraintManager.get_constraints_for_all_models(
+                    self._config)
+                constraints_met = ConstraintManager.check_constraints(constraints, measurement)
+
+
+                # If all constraints met, evaluate performance against metrics
+                logging.info(f'Constraints met: {constraints_met}')
+                if constraints_met:
+                    for key, target in self._model.objectives().items():
+                        achieved = measurement.get_metric(key).value()
+                        logging.info(f'Target: {key}, Desired: {target}, Achieved: {achieved}')
+                        
+                        # Register cost as percent difference for current objective
+                        costs[key] = (abs(achieved - target) / ((achieved + target) / 2.0)) * 100
+
+                    # Sum all costs to generate final cost
+                    cost = sum(costs.values())
+                else:
+                    cost = 1000
+            else:
+                # If measurement came back None, give max penalty
+                cost = 1000
+
+            logging.info(f'Cost is {cost}')
+
             # Inform VW of what happened so we can learn from it
             vw_format = self._vw.parse(self._to_vw_example_format(context, (cost, prob)), pyvw.vw.lContextualBandit)
             # Learn

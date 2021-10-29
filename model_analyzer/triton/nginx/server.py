@@ -48,5 +48,5 @@ class NginxServer(ABC):
             keys are argument names and values are their values.
         """
 
-        self._server_config.set_model_constraints(model_constraints)
-        self._server_config.update_nginx_config()
+        self._nginx_config.set_model_constraints(model_constraints)
+        self._nginx_config.update_nginx_config()

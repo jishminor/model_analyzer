@@ -139,14 +139,14 @@ def get_nginx_handle(config):
     """
 
     if config.nginx_launch_mode == 'local':
-        nginx_config = NginxServerConfig(analyzer_config=config)
+        nginx_config = NginxServerConfig(analyzer_config=config.get_all_config())
         logging.info('Creating a local Nginx Server...')
         server = NginxServerFactory.create_server_local(
             path=config.nginx_server_path,
             config=nginx_config,
             log_path=config.nginx_output_path)
     elif config.nginx_launch_mode == 'docker':
-        nginx_config = NginxServerConfig(analyzer_config=config)
+        nginx_config = NginxServerConfig(analyzer_config=config.get_all_config())
         logging.info('Starting a Nginx Server using docker...')
         server = NginxServerFactory.create_server_docker(
             image=config.nginx_docker_image,

@@ -15,6 +15,7 @@
 from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
+import os
 from jinja2 import Template
 
 class NginxServerConfig:
@@ -99,7 +100,7 @@ http {
 }
     '''
 
-    def __init__(self, model_constraints = {}, analyzer_config = {}, config_path='/etc/nginx/triton-nginx.conf'):
+    def __init__(self, model_constraints = {}, analyzer_config = {}):
         """
         Construct NginxServerConfig
         """
@@ -107,7 +108,7 @@ http {
         # TODO: pass input tensor byte size in the constraints for use
         self._model_constraints = model_constraints
         self._analyzer_config = analyzer_config
-        self._config_path = config_path
+        self._config_path = os.path.abspath(os.path.join(self._analyzer_config['nginx_config_directory'], 'triton-nginx.conf'))
         self._current_config_text = ''
 
     def update_nginx_config(self):

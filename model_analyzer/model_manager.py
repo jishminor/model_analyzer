@@ -31,6 +31,7 @@ import os
 from collections import defaultdict
 import pickle
 import random
+import shutil
 
 
 class ModelManager:
@@ -106,6 +107,15 @@ class ModelManager:
         """
         Runs CB search over list of models in config
         """
+
+        # Create nginx conf directory if not exists
+        try:
+            os.mkdir(self._config.nginx_config_directory)
+        except FileExistsError:
+            shutil.rmtree(self._config.nginx_config_directory)
+            logging.warning('Overriding the nginx conf directory '
+                            f'"{self._config.nginx_config_directory}"...')
+            os.mkdir(self._config.nginx_config_directory)
 
         # Generate cartesian product for actions space (model configs)
         for model in models:
@@ -320,7 +330,6 @@ class ModelManager:
             perf_config.update_config(context)
             perf_config.update_config({'model-name': current_model_instance_name})
 
-            # Start Triton and Nginx server, and load model variant based on the predicted model_config
             # Update config object for Nginx server
             model_constraints = {}
             model_constraints[current_model_instance_name] = self._run_search_cb.get_model_objectives()
@@ -330,6 +339,7 @@ class ModelManager:
                 model_constraints[current_model_instance_name]['perf_throughput'] = int(model_constraints[current_model_instance_name]['perf_throughput'] / request_batch_size)
             self._nginx.update_config(model_constraints)
 
+            # Start Triton and Nginx server, and load model variant based on the predicted model_config
             self._nginx.start()
             self._server.start()
             if not self._create_and_load_model_variant(

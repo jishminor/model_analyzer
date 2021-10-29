@@ -14,6 +14,7 @@
 
 import docker
 import logging
+import os
 from multiprocessing.pool import ThreadPool
 
 from .server import NginxServer
@@ -44,7 +45,7 @@ class NginxServerDocker(NginxServer):
             Absolute path to the nginx log file
         """
 
-        self._server_config = config
+        self._nginx_config = config
         self._docker_client = docker.from_env()
         self._nginx_image = image
         self._nginx_container = None
@@ -57,24 +58,24 @@ class NginxServerDocker(NginxServer):
         """
 
         # Generate the nginx config to mount in the container
-        with open(self._server_config.get_config_path(), 'w+') as output_file_:
-            output_file_.write(self._server_config.get_nginx_config())
+        with open(self._nginx_config.get_config_path(), 'w+') as output_file_:
+            output_file_.write(self._nginx_config.get_nginx_config())
 
         # Mount required directories
-        # TODO: config path should not be set to host nginx, should be other
+        dirpath = os.path.dirname(self._nginx_config.get_config_path())
         volumes = {
-            self._server_config.get_config_path(): {
-                'bind': self._server_config.get_config_path(),
+            dirpath: {
+                'bind': dirpath,
                 'mode': 'ro'
             }
         }
 
         # Map ports, use config values but set to server defaults if not
         # specified
-        nginx_http_port = self._server_config.get_analyzer_config()['nginx_http_endpoint'].split(':')[-1]
-        nginx_grpc_port = self._server_config.get_analyzer_config()['nginx_grpc_endpoint'].split(':')[-1]
-        server_http_port = self._server_config.get_analyzer_config()['triton_http_endpoint'].split(':')[-1]
-        server_grpc_port = self._server_config.get_analyzer_config()['triton_grpc_endpoint'].split(':')[-1]
+        nginx_http_port = self._nginx_config.get_analyzer_config()['nginx_http_endpoint'].split(':')[-1]
+        nginx_grpc_port = self._nginx_config.get_analyzer_config()['nginx_grpc_endpoint'].split(':')[-1]
+        server_http_port = self._nginx_config.get_analyzer_config()['triton_http_endpoint'].split(':')[-1]
+        server_grpc_port = self._nginx_config.get_analyzer_config()['triton_grpc_endpoint'].split(':')[-1]
 
         ports = {
             nginx_http_port: nginx_http_port,
@@ -86,7 +87,7 @@ class NginxServerDocker(NginxServer):
         try:
             # Run the docker container and run the command in the container
             self._nginx_container = self._docker_client.containers.run(
-                command='nginx -c ' + self._server_config.get_config_path(),
+                command='nginx -c ' + self._nginx_config.get_config_path(),
                 name='nginx',
                 image=self._nginx_image,
                 volumes=volumes,
@@ -101,8 +102,7 @@ class NginxServerDocker(NginxServer):
                     "One of the following port(s) are already allocated: "
                     f"{nginx_http_port}, {nginx_grpc_port}, {server_http_port}, {server_grpc_port} "
                     "Change the Nginx server ports using"
-                    " --nginx-http-endpoint, --nginx-grpc-endpoint,"
-                    " and --nginx-metrics-endpoint flags.")
+                    " --nginx-http-endpoint, --nginx-grpc-endpoint")
             else:
                 raise error
 

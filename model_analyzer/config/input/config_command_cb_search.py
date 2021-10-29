@@ -115,6 +115,14 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 "'docker' pulls and launches a nginx docker container with "
                 "the specified version."))
         self._add_config(
+            ConfigField(
+                'nginx_config_directory',
+                field_type=ConfigPrimitive(str),
+                default_value=DEFAULT_NGINX_CONFIG_DIRECTORY,
+                flags=['--nginx-config-directory'],
+                description='Directory to hold nginx configs'
+            ))
+        self._add_config(
             ConfigField('nginx_docker_image',
                         flags=['--nginx-docker-image'],
                         field_type=ConfigPrimitive(str),
@@ -127,7 +135,7 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 field_type=ConfigPrimitive(str),
                 default_value=DEFAULT_NGINX_HTTP_ENDPOINT,
                 description=
-                "Triton Server HTTP endpoint url used by Model Analyzer client. "
+                "Nginx Server HTTP endpoint url used by Model Analyzer client. "
                 "Will be ignored if server-launch-mode is not 'remote'"))
         self._add_config(
             ConfigField(
@@ -136,15 +144,14 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 field_type=ConfigPrimitive(str),
                 default_value=DEFAULT_NGINX_GRPC_ENDPOINT,
                 description=
-                "Triton Server GRPC endpoint url used by Model Analyzer client. "
-                "Will be ignored if server-launch-mode is not 'remote'"))
+                "Nginx Server GRPC endpoint url used by Model Analyzer client. "))
         self._add_config(
             ConfigField(
                 'nginx_server_path',
                 field_type=ConfigPrimitive(str),
                 flags=['--nginx-server-path'],
                 default_value=DEFAULT_NGINX_SERVER_PATH,
-                description='The full path to the nginxserver binary executable'
+                description='The full path to the nginx binary executable'
             ))
         self._add_config(
             ConfigField(
