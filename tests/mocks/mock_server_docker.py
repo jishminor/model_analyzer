@@ -30,15 +30,15 @@ class MockServerDockerMethods(MockServerMethods):
     def __init__(self):
         docker_container_attrs = {
             'exec_run':
-            MagicMock(return_value=(None, bytes(self.TEST_MEM, 'utf-8'))),
+                MagicMock(return_value=(None, bytes(self.TEST_MEM, 'utf-8'))),
             'stats':
-            Mock(return_value={
-                'memory_stats': {
-                    'usage': 0.0,
-                    'max_usage': 0.0,
-                    'limits': 0.0
-                }
-            })
+                Mock(return_value={
+                    'memory_stats': {
+                        'usage': 0.0,
+                        'max_usage': 0.0,
+                        'limits': 0.0
+                    }
+                })
         }
         docker_client_attrs = {
             'containers.run': Mock(return_value=Mock(**docker_container_attrs))
@@ -89,35 +89,47 @@ class MockServerDockerMethods(MockServerMethods):
                                                 model_repository_path,
                                                 triton_image,
                                                 device_requests,
-                                                gpu_uuids,
+                                                gpus,
                                                 http_port=8000,
                                                 grpc_port=8001,
-                                                metrics_port=8002):
+                                                metrics_port=8002,
+                                                mounts=None,
+                                                labels=None):
         """
         Asserts that a triton container was created using the
         supplied arguments
         """
 
+        if mounts is None:
+            mounts = []
+        if labels is None:
+            labels = {}
+
         self._assert_docker_initialized()
 
         env_cmds = [
-            f"CUDA_VISIBLE_DEVICES={','.join([uuid for uuid in gpu_uuids])}"
+            f"CUDA_VISIBLE_DEVICES={','.join([gpu.device_uuid() for gpu in gpus])}"
         ]
+
         mock_volumes = {
             model_repository_path: {
                 'bind': model_repository_path,
                 'mode': 'ro'
             }
         }
+        for mount_str in mounts:
+            host_path, dest, mode = mount_str.split(':')
+            mock_volumes[host_path] = {'bind': dest, 'mode': mode}
 
         cmd = ' '.join(env_cmds + [cmd])
         mock_ports = {http_port: 8000, grpc_port: 8001, metrics_port: 8002}
         self.mock.from_env.return_value.containers.run.assert_called_once_with(
             command=f'bash -c "{cmd}"',
-            name='tritonserver',
+            init=True,
             image=triton_image,
             device_requests=device_requests,
             volumes=mock_volumes,
+            labels=labels,
             ports=mock_ports,
             publish_all_ports=True,
             tty=False,

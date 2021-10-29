@@ -90,6 +90,7 @@ class Record(metaclass=RecordType):
     This class is used for representing
     records
     """
+
     def __init__(self, value, timestamp):
         """
         Parameters
@@ -111,9 +112,14 @@ class Record(metaclass=RecordType):
         """
         The function that is used to aggregate
         this type of record
+
+        Returns
+        -------
+        callable() 
+            [Records] -> Record
         """
 
-        return max
+        return (lambda records: max(records, key=lambda r: r.value()))
 
     @staticmethod
     @abstractmethod

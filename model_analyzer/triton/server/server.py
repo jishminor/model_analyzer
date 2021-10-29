@@ -20,6 +20,7 @@ class TritonServer(ABC):
     Defines the interface for the objects created by
     TritonServerFactory
     """
+
     @abstractmethod
     def start(self, env):
         """
@@ -54,3 +55,13 @@ class TritonServer(ABC):
         """
 
         self._server_config.update_config(params)
+
+    def config(self):
+        """
+        Returns
+        -------
+        TritonServerConfig
+            This server's config
+        """
+
+        return self._server_config

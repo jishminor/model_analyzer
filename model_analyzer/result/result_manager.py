@@ -14,7 +14,7 @@
 
 from model_analyzer.result.result_statistics import ResultStatistics
 from model_analyzer.output.file_writer import FileWriter
-from model_analyzer.constants import TOP_MODELS_REPORT_KEY
+from model_analyzer.constants import LOGGER_NAME, TOP_MODELS_REPORT_KEY
 from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
@@ -25,10 +25,10 @@ from .model_result import ModelResult
 
 import os
 import heapq
-import logging
 from collections import defaultdict
-
 import logging
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class ResultManager:
@@ -99,7 +99,7 @@ class ResultManager:
                 server_output_headers.append(
                     self._gpu_metrics_to_headers[server_output_field])
             else:
-                logging.warning(
+                logger.warning(
                     f'Server output field "{server_output_field}", has no data')
                 continue
             server_output_fields.append(server_output_field)
@@ -121,7 +121,7 @@ class ResultManager:
                 inference_output_headers.append(
                     self._non_gpu_metrics_to_headers[inference_output_field])
             else:
-                logging.warning(
+                logger.warning(
                     f'Inference output field "{inference_output_field}", has no data'
                 )
                 continue
@@ -144,7 +144,7 @@ class ResultManager:
                 gpu_output_headers.append(
                     self._gpu_metrics_to_headers[gpu_output_field])
             else:
-                logging.warning(
+                logger.warning(
                     f'GPU output field "{gpu_output_field}", has no data')
                 continue
             gpu_output_fields.append(gpu_output_field)
@@ -303,7 +303,7 @@ class ResultManager:
         ]
         for model_name in analysis_model_names:
             if model_name not in results:
-                logging.warning(
+                logger.warning(
                     f"Model {model_name} requested for analysis but no results were found. "
                     "Ensure that this model was actually profiled.")
             else:
@@ -344,7 +344,7 @@ class ResultManager:
 
         if model_name not in results or model_config_name not in results[
                 model_name]:
-            logging.error(
+            logger.error(
                 f'No results found for model config: {model_config_name}')
             return (None, [])
         else:
@@ -584,7 +584,7 @@ class ResultManager:
         # Configure server only results path and export results
         server_metrics_path = os.path.join(results_export_directory,
                                            self._config.filename_server_only)
-        logging.info(
+        logger.info(
             f"Exporting server only metrics to {server_metrics_path}...")
         self._export_server_only_csv(
             writer=FileWriter(filename=server_metrics_path),
@@ -595,9 +595,9 @@ class ResultManager:
             results_export_directory, self._config.filename_model_inference)
         metrics_gpu_path = os.path.join(results_export_directory,
                                         self._config.filename_model_gpu)
-        logging.info(
+        logger.info(
             f"Exporting inference metrics to {metrics_inference_path}...")
-        logging.info(f"Exporting GPU metrics to {metrics_gpu_path}...")
+        logger.info(f"Exporting GPU metrics to {metrics_gpu_path}...")
         self._export_model_csv(
             inference_writer=FileWriter(filename=metrics_inference_path),
             gpu_metrics_writer=FileWriter(filename=metrics_gpu_path),

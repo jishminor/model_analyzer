@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from functools import total_ordering
+import logging
 
 from model_analyzer.record.record import Record
 
@@ -20,11 +21,11 @@ from model_analyzer.record.record import Record
 @total_ordering
 class PerfLatency(Record):
     """
-    A record for perf_analyzer
-    metric 'p99 Latency'
+    A record for perf_analyzer latency metric
     """
 
     tag = "perf_latency"
+    _printed_deprecate_warning = False
 
     def __init__(self, value, timestamp=0):
         """
@@ -38,8 +39,8 @@ class PerfLatency(Record):
 
         super().__init__(value, timestamp)
 
-    @staticmethod
-    def header(aggregation_tag=False):
+    @classmethod
+    def header(cls, aggregation_tag=False):
         """
         Parameters
         ----------
@@ -56,6 +57,7 @@ class PerfLatency(Record):
             metric.
         """
 
+        cls._print_deprecate_warning()
         return "p99 Latency (ms)"
 
     def __eq__(self, other):
@@ -64,6 +66,7 @@ class PerfLatency(Record):
         equality between two records
         """
 
+        self._print_deprecate_warning()
         return self.value() == other.value()
 
     def __lt__(self, other):
@@ -73,6 +76,7 @@ class PerfLatency(Record):
         the other
         """
 
+        self._print_deprecate_warning()
         return self.value() > other.value()
 
     def __add__(self, other):
@@ -81,7 +85,8 @@ class PerfLatency(Record):
         to produce a brand new record.
         """
 
-        return PerfLatency(value=(self.value() + other.value()))
+        self._print_deprecate_warning()
+        return self.__class__(value=(self.value() + other.value()))
 
     def __sub__(self, other):
         """
@@ -92,4 +97,12 @@ class PerfLatency(Record):
             of the inverted nature of latency (lower is better)
         """
 
-        return PerfLatency(value=(other.value() - self.value()))
+        self._print_deprecate_warning()
+        return self.__class__(value=(other.value() - self.value()))
+
+    @classmethod
+    def _print_deprecate_warning(cls):
+        if not cls._printed_deprecate_warning:
+            logging.warning(
+                "`perf_latency` is deprecated, use `perf_latency_p99` instead.")
+            cls._printed_deprecate_warning = True

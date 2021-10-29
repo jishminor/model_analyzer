@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,10 @@
 
 from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
+from model_analyzer.record.types.perf_latency_avg import PerfLatencyAvg
+from model_analyzer.record.types.perf_latency_p90 import PerfLatencyP90
+from model_analyzer.record.types.perf_latency_p95 import PerfLatencyP95
+from model_analyzer.record.types.perf_latency_p99 import PerfLatencyP99
 from model_analyzer.record.types.perf_latency import PerfLatency
 from model_analyzer.record.types.perf_throughput import PerfThroughput
 from model_analyzer.record.types.perf_client_response_wait \
@@ -30,14 +34,18 @@ from model_analyzer.record.types.perf_server_compute_output \
     import PerfServerComputeOutput
 
 from model_analyzer.constants import \
-    INTERVAL_SLEEP_TIME, MEASUREMENT_REQUEST_COUNT_STEP, \
+    INTERVAL_SLEEP_TIME, LOGGER_NAME, MEASUREMENT_REQUEST_COUNT_STEP, \
     MEASUREMENT_WINDOW_STEP, PERF_ANALYZER_MEASUREMENT_WINDOW, \
     PERF_ANALYZER_MINIMUM_REQUEST_COUNT
 
 from subprocess import Popen, STDOUT, PIPE
-import logging
 import psutil
 import re
+import logging
+import signal
+import os
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class PerfAnalyzer:
@@ -48,6 +56,10 @@ class PerfAnalyzer:
 
     # The metrics that PerfAnalyzer can collect
     perf_metrics = {
+        PerfLatencyAvg: "_parse_perf_latency_avg",
+        PerfLatencyP90: "_parse_perf_latency_p90",
+        PerfLatencyP95: "_parse_perf_latency_p95",
+        PerfLatencyP99: "_parse_perf_latency_p99",
         PerfLatency: "_parse_perf_latency",
         PerfThroughput: "_parse_perf_throughput",
         PerfClientSendRecv: "_parse_perf_client_send_recv",
@@ -85,7 +97,7 @@ class PerfAnalyzer:
         self._perf_records = None
         self._max_cpu_util = max_cpu_util
 
-    def run(self, metrics):
+    def run(self, metrics, env=None):
         """
         Runs the perf analyzer with the
         intialized configuration
@@ -94,6 +106,9 @@ class PerfAnalyzer:
         metrics : List of Record types
             The list of record types to parse from
             Perf Analyzer
+
+        env: dict
+            Environment variables to set for perf_analyzer run
 
         Returns
         -------
@@ -110,33 +125,57 @@ class PerfAnalyzer:
         if metrics:
             # Synchronously start and finish run
             for _ in range(self._max_retries):
+                logger.debug(
+                    f"Running perf_analyzer with args: {self._config.to_cli_string()}"
+                )
                 cmd = [self.bin_path]
                 cmd += self._config.to_cli_string().replace('=', ' ').split()
 
-                process = Popen(cmd,
-                                start_new_session=True,
-                                stdout=PIPE,
-                                stderr=STDOUT,
-                                encoding='utf-8')
+                perf_analyzer_env = os.environ.copy()
+
+                if env:
+                    # Filter env variables that use env lookups
+                    for variable, value in env.items():
+                        if value.find('$') == -1:
+                            perf_analyzer_env[variable] = value
+                        else:
+                            # Collect the ones that need lookups to give to the shell
+                            perf_analyzer_env[variable] = os.path.expandvars(
+                                value)
+                try:
+                    process = Popen(cmd,
+                                    start_new_session=True,
+                                    stdout=PIPE,
+                                    stderr=STDOUT,
+                                    encoding='utf-8',
+                                    env=perf_analyzer_env)
+                except FileNotFoundError as e:
+                    raise TritonModelAnalyzerException(
+                        f"perf_analyzer binary not found : {e}")
 
                 if self._poll_perf_analyzer(process) == 1:
                     # failure
                     return 1
 
-                if process.returncode != 0:
+                if process.returncode > 0:
                     if self._auto_adjust_parameters(cmd, process) == 1:
                         return 1
+                elif process.returncode < 0:
+                    logger.error(
+                        'perf_analyzer was terminated by signal: '
+                        f'{signal.Signals(abs(process.returncode)).name}')
+                    return 1
                 else:
                     self._parse_output(metrics)
                     break
             else:
                 if self._config['measurement-mode'] == 'time_windows':
-                    logging.info(
+                    logger.info(
                         f"Ran perf_analyzer {self._max_retries} times, "
                         "but no valid requests recorded in max time interval"
                         f" of {self._config['measurement-interval']} ")
                 elif self._config['measurement-mode'] == 'count_windows':
-                    logging.info(
+                    logger.info(
                         f"Ran perf_analyzer {self._max_retries} times, "
                         "but no valid requests recorded over max request count"
                         f" of {self._config['measurement-request-count']} ")
@@ -161,7 +200,7 @@ class PerfAnalyzer:
             # perf_analyzer using too much CPU?
             cpu_util = process_util.cpu_percent(INTERVAL_SLEEP_TIME)
             if cpu_util > self._max_cpu_util:
-                logging.info(
+                logger.info(
                     f'perf_analyzer used significant amount of CPU resources ({cpu_util}%), killing perf_analyzer...'
                 )
                 self._output = process.stdout.read()
@@ -172,7 +211,7 @@ class PerfAnalyzer:
 
             current_timeout -= INTERVAL_SLEEP_TIME
         else:
-            logging.info(
+            logger.info(
                 'perf_analyzer took very long to exit, killing perf_analyzer...'
             )
             process.kill()
@@ -188,8 +227,8 @@ class PerfAnalyzer:
         """
 
         if self._output.find("Failed to obtain stable measurement"
-                             ) != -1 or self._output.find(
-                                 "Please use a larger time window") != -1:
+                            ) != -1 or self._output.find(
+                                "Please use a larger time window") != -1:
             if self._config['measurement-mode'] == 'time_windows':
                 if self._config['measurement-interval'] is None:
                     self._config[
@@ -198,7 +237,7 @@ class PerfAnalyzer:
                     self._config['measurement-interval'] = int(
                         self._config['measurement-interval']
                     ) + MEASUREMENT_WINDOW_STEP
-                logging.info(
+                logger.info(
                     "perf_analyzer's measurement window is too small, "
                     f"increased to {self._config['measurement-interval']} ms.")
             elif self._config['measurement-mode'] is None or self._config[
@@ -210,14 +249,14 @@ class PerfAnalyzer:
                     self._config['measurement-request-count'] = int(
                         self._config['measurement-request-count']
                     ) + MEASUREMENT_REQUEST_COUNT_STEP
-                logging.info(
+                logger.info(
                     "perf_analyzer's request count is too small, "
                     f"increased to {self._config['measurement-request-count']}."
                 )
             return 0
         else:
-            logging.info(f"Running perf_analyzer {cmd} failed with"
-                         f" exit status {process.returncode} : {self._output}")
+            logger.info(f"Running perf_analyzer {cmd} failed with"
+                        f" exit status {process.returncode} : {self._output}")
             return 1
 
     def output(self):
@@ -276,16 +315,13 @@ class PerfAnalyzer:
             if metric not in self.perf_metrics:
                 raise TritonModelAnalyzerException(
                     f"Perf metric : {metric} not found or supported.")
+            parse_func = getattr(self, self.perf_metrics[metric])
             if metric in server_perf_metrics:
-                parse_func = getattr(self, self.perf_metrics[metric])
-                self._perf_records.append(parse_func(server_section))
+                output = parse_func(server_section)
             else:
-                parse_func = getattr(self, self.perf_metrics[metric])
-                self._perf_records.append(parse_func(client_section))
-
-        if not self._perf_records:
-            raise TritonModelAnalyzerException(
-                'perf_analyzer output was not as expected.')
+                output = parse_func(client_section)
+            if output is not None:
+                self._perf_records.append(output)
 
     def _parse_perf_client_send_recv(self, section):
         """
@@ -302,8 +338,8 @@ class PerfAnalyzer:
         if client_send_recv:
             client_send_recv = float(client_send_recv.group(1)) / 1e3
             return PerfClientSendRecv(value=client_send_recv)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not client send/recv time.')
+        logging.warning(
+            'perf_analyzer output did not contain client send/recv time.')
 
     def _parse_perf_client_response_wait(self, section):
         """
@@ -314,7 +350,7 @@ class PerfAnalyzer:
         if client_response_wait:
             client_response_wait = float(client_response_wait.group(1)) / 1e3
             return PerfClientResponseWait(value=client_response_wait)
-        raise TritonModelAnalyzerException(
+        logging.warning(
             'perf_analyzer output did not contain client response wait time.')
 
     def _parse_perf_throughput(self, section):
@@ -326,20 +362,48 @@ class PerfAnalyzer:
         if throughput:
             throughput = float(throughput.group(1))
             return PerfThroughput(value=throughput)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not contain throughput.')
+        logging.warning('perf_analyzer output did not contain throughput.')
 
-    def _parse_perf_latency(self, section):
+    def _parse_perf_latency_avg(self, section):
+        """
+        Parses avg latency from the perf output
+        """
+        return self._parse_perf_latency(section, "Avg latency", PerfLatencyAvg)
+
+    def _parse_perf_latency_p90(self, section):
+        """
+        Parses p90 latency from the perf output
+        """
+        return self._parse_perf_latency(section, "p90 latency", PerfLatencyP90)
+
+    def _parse_perf_latency_p95(self, section):
+        """
+        Parses p95 latency from the perf output
+        """
+        return self._parse_perf_latency(section, "p95 latency", PerfLatencyP95)
+
+    def _parse_perf_latency_p99(self, section):
         """
         Parses p99 latency from the perf output
         """
+        return self._parse_perf_latency(section, "p99 latency", PerfLatencyP99)
 
-        p99_latency = re.search('p99 latency: (\d+\.\d+|\d+)', section)
-        if p99_latency:
-            p99_latency = float(p99_latency.group(1)) / 1e3
-            return PerfLatency(value=p99_latency)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not contain p99 latency.')
+    def _parse_perf_latency(self, section, latency_name=None, parser_cls=None):
+        """
+        Parses latency from the perf output
+        """
+        if latency_name == None and parser_cls == None:
+            # Defaults to p99 latency
+            latency_name = "p99 latency"
+            # Different from PerfLatencyP99
+            parser_cls = PerfLatency
+
+        latency = re.search(latency_name + ": (\d+\.\d+|\d+)", section)
+        if latency:
+            latency = float(latency.group(1)) / 1e3
+            return parser_cls(value=latency)
+        logging.warning("perf_analyzer output did not contain " + latency_name +
+                        ".")
 
     def _parse_perf_server_queue(self, section):
         """
@@ -350,8 +414,8 @@ class PerfAnalyzer:
         if server_queue:
             server_queue = float(server_queue.group(1)) / 1e3
             return PerfServerQueue(value=server_queue)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not server queue time.')
+        logging.warning(
+            'perf_analyzer output did not contain server queue time.')
 
     def _parse_perf_server_compute_input(self, section):
         """
@@ -362,8 +426,8 @@ class PerfAnalyzer:
         if server_compute_input:
             server_compute_input = float(server_compute_input.group(1)) / 1e3
             return PerfServerComputeInput(value=server_compute_input)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not server compute input time.')
+        logging.warning(
+            'perf_analyzer output did not contain server compute input time.')
 
     def _parse_perf_server_compute_infer(self, section):
         """
@@ -374,8 +438,8 @@ class PerfAnalyzer:
         if server_compute_infer:
             server_compute_infer = float(server_compute_infer.group(1)) / 1e3
             return PerfServerComputeInfer(value=server_compute_infer)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not server compute infer time.')
+        logging.warning(
+            'perf_analyzer output did not contain server compute infer time.')
 
     def _parse_perf_server_compute_output(self, section):
         """
@@ -386,5 +450,5 @@ class PerfAnalyzer:
         if server_compute_output:
             server_compute_output = float(server_compute_output.group(1)) / 1e3
             return PerfServerComputeOutput(value=server_compute_output)
-        raise TritonModelAnalyzerException(
-            'perf_analyzer output did not server compute output time.')
+        logging.warning(
+            'perf_analyzer output did not contain server compute output time.')

@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from model_analyzer.config.input.config_utils \
+    import objective_list_output_mapper, parent_path_validator, file_path_validator
+from model_analyzer.constants import LOGGER_NAME
 from .config_defaults import \
     DEFAULT_CHECKPOINT_DIRECTORY, DEFAULT_EXPORT_PATH, \
     DEFAULT_FILENAME_MODEL_GPU, DEFAULT_FILENAME_MODEL_INFERENCE, \
@@ -34,14 +37,17 @@ from model_analyzer.record.record import RecordType
 from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
-import logging
 import os
+import logging
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class ConfigCommandAnalyze(ConfigCommand):
     """
     Model Analyzer config object.
     """
+
     def _fill_config(self):
         """
         Builder function makes calls to add config to 
@@ -58,7 +64,8 @@ class ConfigCommandAnalyze(ConfigCommand):
                 'checkpoint_directory',
                 flags=['--checkpoint-directory', '-s'],
                 default_value=DEFAULT_CHECKPOINT_DIRECTORY,
-                field_type=ConfigPrimitive(str),
+                field_type=ConfigPrimitive(str,
+                                           validator=parent_path_validator),
                 description=
                 "Full path to directory to which to read and write checkpoints and profile data."
             ))
@@ -75,15 +82,6 @@ class ConfigCommandAnalyze(ConfigCommand):
         model objectives and constraints, 
         as well as plots
         """
-        def objective_list_output_mapper(objectives):
-            # Takes a list of objectives and maps them
-            # into a dict
-            output_dict = {}
-            for objective in objectives:
-                value = ConfigPrimitive(type_=int)
-                value.set_value(10)
-                output_dict[objective] = value
-            return output_dict
 
         objectives_scheme = ConfigUnion([
             ConfigObject(
@@ -104,17 +102,33 @@ class ConfigCommandAnalyze(ConfigCommand):
         constraints_scheme = ConfigObject(
             schema={
                 'perf_throughput':
-                ConfigObject(schema={
-                    'min': ConfigPrimitive(int),
-                }),
+                    ConfigObject(schema={
+                        'min': ConfigPrimitive(int),
+                    }),
+                'perf_latency_avg':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
+                'perf_latency_p90':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
+                'perf_latency_p95':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
+                'perf_latency_p99':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
                 'perf_latency':
-                ConfigObject(schema={
-                    'max': ConfigPrimitive(int),
-                }),
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
                 'gpu_used_memory':
-                ConfigObject(schema={
-                    'max': ConfigPrimitive(int),
-                }),
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
             })
         self._add_config(
             ConfigField(
@@ -130,11 +144,11 @@ class ConfigCommandAnalyze(ConfigCommand):
                 # Any key is allowed, but the keys must follow the pattern
                 # below
                 '*':
-                ConfigObject(
-                    schema={
-                        'objectives': objectives_scheme,
-                        'constraints': constraints_scheme,
-                    })
+                    ConfigObject(
+                        schema={
+                            'objectives': objectives_scheme,
+                            'constraints': constraints_scheme,
+                        })
             },
             output_mapper=ConfigModelAnalysisSpec.
             model_object_to_config_model_analysis_spec)
@@ -169,13 +183,13 @@ class ConfigCommandAnalyze(ConfigCommand):
         """
 
         self._add_config(
-            ConfigField(
-                'export_path',
-                flags=['--export-path', '-e'],
-                default_value=DEFAULT_EXPORT_PATH,
-                field_type=ConfigPrimitive(str),
-                description=
-                "Full path to directory in which to store the results"))
+            ConfigField('export_path',
+                        flags=['--export-path', '-e'],
+                        default_value=DEFAULT_EXPORT_PATH,
+                        field_type=ConfigPrimitive(
+                            str, validator=file_path_validator),
+                        description=
+                        "Full path to directory in which to store the results"))
         self._add_config(
             ConfigField(
                 'filename_model_inference',
@@ -190,8 +204,7 @@ class ConfigCommandAnalyze(ConfigCommand):
                 flags=['--filename-model-gpu'],
                 field_type=ConfigPrimitive(str),
                 default_value=DEFAULT_FILENAME_MODEL_GPU,
-                description='Specifies filename for storing model GPU metrics')
-        )
+                description='Specifies filename for storing model GPU metrics'))
         self._add_config(
             ConfigField(
                 'filename_server_only',
@@ -220,15 +233,16 @@ class ConfigCommandAnalyze(ConfigCommand):
                 flags=['--gpu-output-fields'],
                 field_type=ConfigListString(),
                 default_value=DEFAULT_GPU_OUTPUT_FIELDS,
-                description='Specifies column keys for model gpu metrics table'
-            ))
+                description='Specifies column keys for model gpu metrics table')
+        )
         self._add_config(
-            ConfigField('server_output_fields',
-                        flags=['--server-output-fields'],
-                        field_type=ConfigListString(),
-                        default_value=DEFAULT_SERVER_OUTPUT_FIELDS,
-                        description=
-                        'Specifies column keys for server-only metrics table'))
+            ConfigField(
+                'server_output_fields',
+                flags=['--server-output-fields'],
+                field_type=ConfigListString(),
+                default_value=DEFAULT_SERVER_OUTPUT_FIELDS,
+                description='Specifies column keys for server-only metrics table'
+            ))
 
     def _add_report_configs(self):
         """
@@ -277,11 +291,12 @@ class ConfigCommandAnalyze(ConfigCommand):
                 "Shorthand flag for specifying a maximum latency in ms."))
 
         self._add_config(
-            ConfigField('min_throughput',
-                        flags=['--min-throughput'],
-                        field_type=ConfigPrimitive(int),
-                        description=
-                        "Shorthand flag for specifying a minimum throughput."))
+            ConfigField(
+                'min_throughput',
+                flags=['--min-throughput'],
+                field_type=ConfigPrimitive(int),
+                description="Shorthand flag for specifying a minimum throughput."
+            ))
 
     def _preprocess_and_verify_arguments(self):
         """
@@ -294,7 +309,7 @@ class ConfigCommandAnalyze(ConfigCommand):
         """
 
         if not self.export_path:
-            logging.warning(
+            logger.warning(
                 f"--export-path not specified. Using {self._fields['export_path'].default_value()}"
             )
         elif self.export_path and not os.path.isdir(self.export_path):
@@ -344,13 +359,13 @@ class ConfigCommandAnalyze(ConfigCommand):
         """
         plots_scheme = ConfigObject(schema={
             '*':
-            ConfigObject(
-                schema={
-                    'title': ConfigPrimitive(type_=str),
-                    'x_axis': ConfigPrimitive(type_=str),
-                    'y_axis': ConfigPrimitive(type_=str),
-                    'monotonic': ConfigPrimitive(type_=bool)
-                })
+                ConfigObject(
+                    schema={
+                        'title': ConfigPrimitive(type_=str),
+                        'x_axis': ConfigPrimitive(type_=str),
+                        'y_axis': ConfigPrimitive(type_=str),
+                        'monotonic': ConfigPrimitive(type_=bool)
+                    })
         },
                                     output_mapper=ConfigPlot.from_object)
         self._add_config(
@@ -375,11 +390,15 @@ class ConfigCommandAnalyze(ConfigCommand):
         if self.latency_budget:
             if self.constraints:
                 constraints = self.constraints
-                constraints['perf_latency'] = {'max': self.latency_budget}
+                constraints['perf_latency_p99'] = {'max': self.latency_budget}
+                if 'perf_latency' in constraints:
+                    # In case a tighter perf_latency is provided
+                    constraints['perf_latency'] = constraints[
+                        'perf_latency_p99']
                 self._fields['constraints'].set_value(constraints)
             else:
                 self._fields['constraints'].set_value(
-                    {'perf_latency': {
+                    {'perf_latency_p99': {
                         'max': self.latency_budget
                     }})
 
@@ -414,12 +433,16 @@ class ConfigCommandAnalyze(ConfigCommand):
             # Shorthands
             if self.latency_budget:
                 if 'constraints' in new_model:
-                    new_model['constraints']['perf_latency'] = {
+                    new_model['constraints']['perf_latency_p99'] = {
                         'max': self.latency_budget
                     }
+                    if 'perf_latency' in new_model['constraints']:
+                        # In case a tighter perf_latency is provided
+                        new_model['constraints']['perf_latency'] = new_model[
+                            'constraints']['perf_latency_p99']
                 else:
                     new_model['constraints'] = {
-                        'perf_latency': {
+                        'perf_latency_p99': {
                             'max': self.latency_budget
                         }
                     }

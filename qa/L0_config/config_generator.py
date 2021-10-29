@@ -32,7 +32,6 @@ def _get_sweep_configs(profile_models):
                 }
             } for model in profile_models
         },
-        'triton_launch_mode': ['docker'],
     }
     model_config['total_param'] = 4
     sweep_configs.append(model_config)
@@ -51,7 +50,6 @@ def _get_sweep_configs(profile_models):
                 }
             } for model in profile_models
         },
-        'triton_launch_mode': ['docker'],
     }
     model_config['total_param'] = 4
     sweep_configs.append(model_config)
@@ -69,7 +67,6 @@ def _get_sweep_configs(profile_models):
                 }
             } for model in profile_models
         },
-        'triton_launch_mode': ['docker'],
     }
     model_config['total_param'] = 4
     sweep_configs.append(model_config)

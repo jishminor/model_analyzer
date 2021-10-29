@@ -81,7 +81,10 @@ profile_models: <comma-delimited-string-list>
 [ max_retries: <int> | default: 100 ]
 
 # Specifies how long (seconds) to gather server-only metrics
-[ duration_seconds: <int> | default: 5 ]
+[ duration_seconds: <int> | default: 2 ]
+
+# Specify whether DCGM should be used by Model Analyzer to collect GPU metricss
+[ use_local_gpu_monitor: <bool> | default: False ]
 
 # Duration of waiting time between each metric measurement in seconds
 [ monitoring_interval: <float> | default: 1 ]
@@ -106,14 +109,17 @@ profile_models: <comma-delimited-string-list>
 # Maximum CPU utilization value allowed for the perf_analyzer.
 [ perf_analyzer_cpu_util: <float> | default: 80.0 ]
 
-# Enables writing the output from the perf_analyzer to stdout.
+# Enables writing the output from the perf_analyzer to a file or stdout.
 [ perf_output: <bool> | default: false ]
+
+# If specified, setting --perf-output will write the perf_analyzer output to the file at # this location
+[ perf_output_path: <str> ]
 
 # Maximum number of times perf_analyzer is launched with auto adjusted parameters in an attempt to profile a model
 [ perf_analyzer_max_auto_adjusts: <int> | default: 10 ]
 
 # Triton Docker image tag used when launching using Docker mode
-[ triton_docker_image: <string> | default: nvcr.io/nvidia/tritonserver:21.07-py3 ]
+[ triton_docker_image: <string> | default: nvcr.io/nvidia/tritonserver:21.10-py3 ]
 
 # Triton Server HTTP endpoint url used by Model Analyzer client. Will be ignored if server-launch-mode is not 'remote'".
 [ triton_http_endpoint: <string> | default: localhost:8000 ]
@@ -134,8 +140,12 @@ profile_models: <comma-delimited-string-list>
 # containers launched by model-analyzer. Will be ignored in other launch modes
 [ triton_docker_mounts: <list of strings> ]
 
+# Dict of name=value pairs containing metadata for the tritonserve docker container 
+# launched in docker launch mode
+[ triton_docker_labels: <dict> ]
+
 # How Model Analyzer will launch triton. It should
-# be either "docker", "local", or "remote".
+# be either "docker", "local", "remote" or "c_api".
 # See docs/launch_modes.md for more information.
 [ triton_launch_mode: <string> | default: 'local' ]
 
@@ -302,11 +312,11 @@ Before proceeding, it will be helpful to see the documentation on [Model Analyze
 A constraint, specifies the bounds that determine a successful run. There are
 three constraints allowed:
 
-| Option Name       |   Units   | Constraint | Description                                          |
-| :---------------- | :-------: | :--------: | :--------------------------------------------------- |
-| `perf_throughput` | inf / sec |    min     | Specify minimum desired throughput.                  |
-| `perf_latency`    |    ms     |    max     | Specify maximum tolerable latency or latency budget. |
-| `gpu_used_memory` |    MB     |    max     | Specify maximum GPU memory used by model.            |
+| Option Name        |   Units   | Constraint | Description                                          |
+| :----------------- | :-------: | :--------: | :--------------------------------------------------- |
+| `perf_throughput`  | inf / sec |    min     | Specify minimum desired throughput.                  |
+| `perf_latency_p99` |    ms     |    max     | Specify maximum tolerable latency or latency budget. |
+| `gpu_used_memory`  |    MB     |    max     | Specify maximum GPU memory used by model.            |
 
 
 #### Examples
@@ -318,10 +328,10 @@ perf_throughput:
     min: 5
 ```
 
-To filter out the results when `perf_latency` is larger than 100 milliseconds:
+To filter out the results when `perf_latency_p99` is larger than 100 milliseconds:
 
 ```yaml
-perf_latency:
+perf_latency_p99:
     max: 100
 ```
 
@@ -335,7 +345,7 @@ Keys can be combined for more complex constraints:
 ```yaml
 gpu_used_memory:
     max: 200
-perf_latency:
+perf_latency_p99:
     max: 100
 ```
 
@@ -370,7 +380,7 @@ analysis_models:
             max: 200
   model_2:
     constraints:
-        perf_latency:
+        perf_latency_p99:
             max: 50
 ```
 
@@ -379,15 +389,15 @@ analysis_models:
 Objectives specify the sorting criteria for the final results. The fields below
 are supported under this object type:
 
-| Option Name       | Description                                            |
-| :---------------- | :----------------------------------------------------- |
-| `perf_throughput` | Use throughput as the objective.                       |
-| `perf_latency`    | Use latency as the objective.                          |
-| `gpu_used_memory` | Use GPU memory used by the model as the objective.     |
-| `gpu_free_memory` | Use GPU memory not used by the model as the objective. |
-| `gpu_utilization` | Use the GPU utilization as the objective.              |
-| `cpu_used_ram`    | Use RAM used by the model as the objective.            |
-| `cpu_free_ram`    | Use RAM not used by the model as the objective.        |
+| Option Name        | Description                                            |
+| :----------------- | :----------------------------------------------------- |
+| `perf_throughput`  | Use throughput as the objective.                       |
+| `perf_latency_p99` | Use latency as the objective.                          |
+| `gpu_used_memory`  | Use GPU memory used by the model as the objective.     |
+| `gpu_free_memory`  | Use GPU memory not used by the model as the objective. |
+| `gpu_utilization`  | Use the GPU utilization as the objective.              |
+| `cpu_used_ram`     | Use RAM used by the model as the objective.            |
+| `cpu_free_ram`     | Use RAM not used by the model as the objective.        |
 
 An example `objectives` that will sort the results by throughput looks like
 below:
@@ -401,7 +411,7 @@ To sort the results by latency, `objectives` should look like:
 
 ```yaml
 objectives:
-- perf_latency
+- perf_latency_p99
 ```
 #### Weighted Objectives
 
@@ -411,7 +421,7 @@ analyzer sorts results. For example:
 
 ```yaml
 objectives:
-- perf_latency
+- perf_latency_p99
 - perf_throughput
 ```
 
@@ -439,7 +449,7 @@ An extension of the above `objectives` is explicitly specifying the weights. For
 example:
 ```yaml
 objectives:
-    perf_latency: 2
+    perf_latency_p99: 2
     perf_throughput: 3
 ```
 
@@ -620,7 +630,7 @@ profile_models:
   model_1:
     perf_analyzer_flags:
         percentile: 95
-        latency_report_file: /path/to/latency/report/file
+        latency-report-file: /path/to/latency/report/file
 ```
 
 The `perf_analyzer_flags` section can also be specified globally to affect
@@ -634,14 +644,25 @@ profile_models:
         batch_sizes: 4
 perf_analyzer_flags:
     percentile: 95
-    latency_report_file: /path/to/latency/report/file
+    latency-report-file: /path/to/latency/report/file
 ```
 
-**Important Notes**: 
+**Important Notes**:
+* When providing arguments under `perf_analyzer_flags`, you must use `-` instead
+  of `_`. This casing is important and Model Analyzer will not recognize
+  `snake_cased` arguments.
 * The Model Analyzer also provides certain arguments to the `perf_analyzer`
-  instances it launches. These ***cannot*** be overriden by providing those
-  arguments in this section. An example of this is `perf_measurement_window`,
-  which is an argument to Model Analyzer itself.
+  instances it launches. They are the following:
+  * `concurrency-range`
+  * `batch-size`
+  * `model-name`
+  * `measurement-mode`
+  * `service-kind`
+  * `triton-server-directory`
+  * `model-repository`
+  * `protocol`
+  * `url`
+  If provided under the `perf_analyzer_flags` section, their values will be overriden. Caution should therefore be exercised when overriding these.
 
 ### `<triton-server-flags>`
 
@@ -685,7 +706,7 @@ profile_models:
         exit_timeout_secs: 120
 ```
 
-**Important Notes**: 
+**Important Notes**:
 * The Model Analyzer also provides certain arguments to the `tritonserver`
   instances it launches. These ***cannot*** be overriden by providing those
   arguments in this section. An example of this is `http-port`, which is an
@@ -740,7 +761,7 @@ follows:
 plots:
   plot_name_1:
     title: Title
-    x_axis: perf_latency
+    x_axis: perf_latency_p99
     y_axis: perf_throughput
     monotonic: True
   plot_name_2:
@@ -754,7 +775,7 @@ file to which the plot will be saved as a `.png`. Each plot object also requires
 specifying each of the following:
 * `title` : The title of the plot
 * `x_axis` : The metric tag for the metric that should appear in the x-axis,
-  e.g. `perf_latency`. The plotted points are also sorted by the values of this
+  e.g. `perf_latency_p99`. The plotted points are also sorted by the values of this
   metric.
 * `y_axis` : The metric tag for the metric that should appear in the y-axis. 
 * `monotonic` : Some plots may require consecutive points to be strictly
@@ -891,7 +912,7 @@ analysis_models:
             max: 200
   model_1:  
     constraints:
-        perf_latency:
+        perf_latency_p99:
             max: 80
 objectives:
 - perf_throughput
@@ -908,7 +929,7 @@ report_model_configs:
   model_1_i0:
     throughput_v_latency:
       title: Title
-      x_axis: perf_latency
+      x_axis: perf_latency_p99
       y_axis: perf_throughput
       monotonic: True
 ```
@@ -920,13 +941,13 @@ report_model_configs:
   model_1_i0:
     throughput_v_latency:
         title: Title
-        x_axis: perf_latency
+        x_axis: perf_latency_p99
         y_axis: perf_throughput
         monotonic: True
   model_2_i0:
     gpu_mem_v_latency:
         title: Title
-        x_axis: perf_latency
+        x_axis: perf_latency_p99
         y_axis: gpu_used_memory
         monotonic: False
 ```

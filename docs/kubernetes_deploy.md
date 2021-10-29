@@ -1,5 +1,5 @@
 <!--
-Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2020-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -79,7 +79,7 @@ images:
 
   triton:
     image: nvcr.io/nvidia/tritonserver
-    tag: 21.07-py3
+    tag: 21.10-py3
 ```
 
 The model analyzer executable uses the config file defined in `helm-chart/templates/config-map.yaml`. This config can be modified to supply arguments to model analyzer. Only the content under the `config.yaml` section of the file should be modified.
@@ -126,7 +126,7 @@ data:
         objectives:
           perf_throughput: 10
         constraints:
-          perf_latency:
+          perf_latency_p99:
             max: 15
 
     ######################

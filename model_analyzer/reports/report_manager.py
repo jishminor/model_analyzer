@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from model_analyzer.constants import TOP_MODELS_REPORT_KEY
+from model_analyzer.constants import LOGGER_NAME, TOP_MODELS_REPORT_KEY
 from model_analyzer.result.constraint_manager import ConstraintManager
 from model_analyzer.record.metrics_manager import MetricsManager
 from model_analyzer.plots.plot_manager import PlotManager
@@ -20,8 +20,10 @@ from model_analyzer.result.result_table import ResultTable
 from .pdf_report import PDFReport
 
 import os
-import logging
 from collections import defaultdict
+import logging
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class ReportManager:
@@ -115,7 +117,7 @@ class ReportManager:
                     num_configs=self._config.num_configs_per_model,
                     statistics=statistics)
             else:
-                logging.warning(
+                logger.warning(
                     f'No data found for model {model_name}, skipping export summary.'
                 )
 
@@ -136,7 +138,7 @@ class ReportManager:
             os.makedirs(model_report_dir, exist_ok=True)
             output_filename = os.path.join(model_report_dir,
                                            'result_summary.pdf')
-            logging.info(f"Exporting Summary Report to {output_filename}...")
+            logger.info(f"Exporting Summary Report to {output_filename}...")
             summary.write_report(filename=output_filename)
 
     def create_detailed_reports(self):
@@ -165,7 +167,7 @@ class ReportManager:
             os.makedirs(model_report_dir, exist_ok=True)
             output_filename = os.path.join(model_report_dir,
                                            'detailed_report.pdf')
-            logging.info(f"Exporting Detailed Report to {output_filename}...")
+            logger.info(f"Exporting Detailed Report to {output_filename}...")
             report.write_report(filename=output_filename)
 
     def _add_summary_data(self):
@@ -458,7 +460,7 @@ class ReportManager:
                 row = [
                     model_config.get_field('name'),
                     model_config.dynamic_batching_string(), instance_group_str,
-                    measurement.get_metric_value('perf_latency'),
+                    measurement.get_metric_value('perf_latency_p99'),
                     measurement.get_metric_value('perf_throughput'),
                     measurement.get_metric_value('cpu_used_ram'),
                     measurement.get_metric_value('gpu_used_memory'),
@@ -471,7 +473,7 @@ class ReportManager:
                 row = [
                     model_config.get_field('name'),
                     model_config.dynamic_batching_string(), instance_group_str,
-                    measurement.get_metric_value('perf_latency'),
+                    measurement.get_metric_value('perf_latency_p99'),
                     measurement.get_metric_value('perf_throughput'),
                     measurement.get_metric_value('cpu_used_ram')
                 ]
@@ -485,7 +487,7 @@ class ReportManager:
 
         model_config, measurements = self._detailed_report_data[
             model_config_name]
-        sort_by_tag = 'perf_latency' if self._mode == 'online' else 'perf_throughput'
+        sort_by_tag = 'perf_latency_p99' if self._mode == 'online' else 'perf_throughput'
         measurements = sorted(measurements,
                               key=lambda x: x.get_metric_value(sort_by_tag),
                               reverse=True)
@@ -516,7 +518,7 @@ class ReportManager:
             for measurement in measurements:
                 row = [
                     measurement.get_parameter(first_column_tag),
-                    measurement.get_metric_value('perf_latency'),
+                    measurement.get_metric_value('perf_latency_p99'),
                     measurement.get_metric_value('perf_client_response_wait'),
                     measurement.get_metric_value('perf_server_queue'),
                     measurement.get_metric_value('perf_server_compute_input'),
@@ -531,7 +533,7 @@ class ReportManager:
             for measurement in measurements:
                 row = [
                     measurement.get_parameter(first_column_tag),
-                    measurement.get_metric_value('perf_latency'),
+                    measurement.get_metric_value('perf_latency_p99'),
                     measurement.get_metric_value('perf_client_response_wait'),
                     measurement.get_metric_value('perf_server_queue'),
                     measurement.get_metric_value('perf_server_compute_input'),

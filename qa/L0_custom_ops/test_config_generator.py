@@ -14,6 +14,7 @@
 
 import argparse
 import yaml
+import os
 
 
 class TestConfigGenerator:
@@ -26,9 +27,11 @@ class TestConfigGenerator:
     TO ADD A TEST: Simply add a member function whose name starts
                     with 'generate'.
     """
+
     def __init__(self):
         test_functions = [
-            self.__getattribute__(name) for name in dir(self)
+            self.__getattribute__(name)
+            for name in dir(self)
             if name.startswith('generate')
         ]
 
@@ -53,8 +56,8 @@ class TestConfigGenerator:
             '--library-path',
             type=str,
             required=True,
-            help=
-            'The path to the backend shared libraries used by the custom op')
+            help='The path to the backend shared libraries used by the custom op'
+        )
 
         self.args = parser.parse_args()
         self.profile_models = sorted(self.args.profile_models.split(','))
@@ -76,6 +79,9 @@ class TestConfigGenerator:
 
     def generate_docker_mode_custom_op_config(self):
         self.config['triton_launch_mode'] = 'docker'
+        if 'TRITON_LAUNCH_DOCKER_IMAGE' in os.environ:
+            self.config['triton_docker_image'] = os.environ[
+                'TRITON_LAUNCH_DOCKER_IMAGE']
         self.config['triton_docker_mounts'] = [
             f'{self.args.preload_path}:{self.args.preload_path}:ro',
         ]
@@ -84,6 +90,16 @@ class TestConfigGenerator:
             'LD_LIBRARY_PATH': self.args.library_path
         }
         with open('config-docker.yaml', 'w+') as f:
+            yaml.dump(self.config, f)
+
+    def generate_c_api_custom_op_config(self):
+        self.config['triton_launch_mode'] = 'c_api'
+        self.config['perf_output'] = True
+        self.config['triton_server_environment'] = {
+            'LD_PRELOAD': self.args.preload_path,
+            'LD_LIBRARY_PATH': self.args.library_path
+        }
+        with open('config-c_api.yaml', 'w+') as f:
             yaml.dump(self.config, f)
 
 

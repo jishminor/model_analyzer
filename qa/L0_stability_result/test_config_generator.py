@@ -26,9 +26,11 @@ class TestConfigGenerator:
     TO ADD A TEST: Simply add a member function whose name starts
                     with 'generate'.
     """
+
     def __init__(self):
         test_functions = [
-            self.__getattribute__(name) for name in dir(self)
+            self.__getattribute__(name)
+            for name in dir(self)
             if name.startswith('generate')
         ]
 
@@ -42,7 +44,7 @@ class TestConfigGenerator:
                             '--analysis-models',
                             type=str,
                             required=True,
-                            help='The config file for this test')
+                            help='The models used for this test')
 
         self.args = parser.parse_args()
         self.config = {}

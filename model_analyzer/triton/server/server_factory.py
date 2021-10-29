@@ -22,8 +22,14 @@ class TritonServerFactory:
     """
     A factory for creating TritonServer instances
     """
+
     @staticmethod
-    def create_server_docker(image, config, gpus, log_path=None, mounts=None):
+    def create_server_docker(image,
+                             config,
+                             gpus,
+                             log_path=None,
+                             mounts=None,
+                             labels=None):
         """
         Parameters
         ----------
@@ -38,18 +44,21 @@ class TritonServerFactory:
             Absolute path to the triton log file
         mounts: list of str
             The volumes to be mounted to the tritonserver container
+        labels: dict
+            name-value pairs for label to set metadata for triton docker
+            container. (Not the same as environment variables)
 
         Returns
         -------
         TritonServerDocker
         """
 
-        return TritonServerDocker(
-            image=image,
-            config=config,
-            gpus=GPUDeviceFactory.verify_requested_gpus(gpus),
-            log_path=log_path,
-            mounts=mounts)
+        return TritonServerDocker(image=image,
+                                  config=config,
+                                  gpus=gpus,
+                                  log_path=log_path,
+                                  mounts=mounts,
+                                  labels=labels)
 
     @staticmethod
     def create_server_local(path, config, gpus, log_path=None):
@@ -71,8 +80,7 @@ class TritonServerFactory:
         TritonServerLocal
         """
 
-        return TritonServerLocal(
-            path=path,
-            config=config,
-            gpus=GPUDeviceFactory.verify_requested_gpus(gpus),
-            log_path=log_path)
+        return TritonServerLocal(path=path,
+                                 config=config,
+                                 gpus=gpus,
+                                 log_path=log_path)

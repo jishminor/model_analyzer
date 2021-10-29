@@ -39,7 +39,7 @@ $HOME
 ## Step 1: Install Model Analyzer and Run Container
 
 Install Model Analyzer by following the instructions in the
-[Installation](./install.md) section, and run the Triton Model Analyzer
+[Installation](./install.md#building-the-dockerfile) section, and run the Triton Model Analyzer
 container as shown below. 
 
 ```
@@ -130,7 +130,7 @@ In order to generate tables and summary reports, use the `analyze` subcommand as
 follows.
 
 ```
-$ mkdir analysis results
+$ mkdir analysis_results
 $ model-analyzer analyze --analysis-models add_sub -e analysis_results
 ```
 

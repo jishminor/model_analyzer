@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from model_analyzer.constants import LOGGER_NAME
 from .model_manager import ModelManager
 from .result.result_manager import ResultManager
 from .record.metrics_manager import MetricsManager
@@ -29,6 +30,8 @@ from .model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
 import logging
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class Analyzer:
@@ -58,7 +61,7 @@ class Analyzer:
         self._result_manager = ResultManager(config=config,
                                              state_manager=self._state_manager)
 
-    def profile(self, client):
+    def profile(self, client, gpus):
         """
         Subcommand: PROFILE
 
@@ -69,7 +72,9 @@ class Analyzer:
         ----------
         client : TritonClient
             Instance used to load/unload models
-        
+        gpus: List of GPUDevices
+            The gpus being used to profile
+
         Raises
         ------
         TritonModelAnalyzerException
@@ -80,12 +85,11 @@ class Analyzer:
                 f"Expected config of type {ConfigCommandProfile},"
                 " got {type(self._config)}.")
 
-        logging.info('Profiling server only metrics...')
-
         self._metrics_manager = MetricsManager(
             config=self._config,
             client=client,
             server=self._server,
+            gpus=gpus,
             result_manager=self._result_manager,
             state_manager=self._state_manager)
 
@@ -98,10 +102,12 @@ class Analyzer:
             state_manager=self._state_manager)
 
         # Get metrics for server only
-        self._server.start()
-        client.wait_for_server_ready(self._config.client_max_retries)
-        self._metrics_manager.profile_server()
-        self._server.stop()
+        if self._config.triton_launch_mode != 'c_api':
+            logger.info('Profiling server only metrics...')
+            self._server.start()
+            client.wait_for_server_ready(self._config.client_max_retries)
+            self._metrics_manager.profile_server()
+            self._server.stop()
 
         # Profile each model, save state after each
         for model in self._config.profile_models:
@@ -115,7 +121,7 @@ class Analyzer:
         profiled_model_list = list(
             self._state_manager.get_state_variable(
                 'ResultManager.results').keys())
-        logging.info(
+        logger.info(
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 

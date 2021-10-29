@@ -1,5 +1,5 @@
 <!--
-Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2020-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,10 @@ for more info on these
 
 * `perf_throughput`: The number of inferences per second measured by the perf
   analyzer.
-* `perf_latency`: The p99 latency as measured by perf analyzer.
+* `perf_latency_avg`: The average latency as measured by perf analyzer.
+* `perf_latency_p90`: The p90 latency as measured by perf analyzer.
+* `perf_latency_p95`: The p95 latency as measured by perf analyzer.
+* `perf_latency_p99`: The p99 latency as measured by perf analyzer.
 * `perf_client_response_wait`: The time spent waiting for a response from the
   server, after an inference request has been sent.
 * `perf_client_send_recv`: The total amount of time it takes the client to send
@@ -63,7 +66,7 @@ recorded and aggregated over fixed intervals during a perf analyzer run.
 * `cpu_used_ram`: The total amount of memory used by all CPUs
 * `cpu_available_ram`: The total amount of availble CPU memory.
 
-**Warning**: Collecting CPU metrics might affect model inference metrics such as throughput and latency. By default, CPU metrics are not collected. To collect CPU metrics, set `collect_cpu_metrics` flag to `true`, see [Configuring Model Analyzer](docs/config.md) for details.
+**Warning**: Collecting CPU metrics might affect model inference metrics such as throughput and latency. By default, CPU metrics are not collected. To collect CPU metrics, set `collect_cpu_metrics` flag to `true`, see [Configuring Model Analyzer](./config.md) for details.
 
 ## Additional tags for output headers
 

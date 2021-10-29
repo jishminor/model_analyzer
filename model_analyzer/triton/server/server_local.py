@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from .server import TritonServer
-from model_analyzer.constants import SERVER_OUTPUT_TIMEOUT_SECS
+from model_analyzer.constants import LOGGER_NAME, SERVER_OUTPUT_TIMEOUT_SECS
 from model_analyzer.model_analyzer_exceptions \
     import TritonModelAnalyzerException
 
@@ -22,7 +22,7 @@ import psutil
 import logging
 import os
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class TritonServerLocal(TritonServer):
@@ -30,6 +30,7 @@ class TritonServerLocal(TritonServer):
     Concrete Implementation of TritonServer interface that runs
     tritonserver locally as as subprocess.
     """
+
     def __init__(self, path, config, gpus, log_path):
         """
         Parameters
@@ -61,8 +62,7 @@ class TritonServerLocal(TritonServer):
         if self._server_path:
             # Create command list and run subprocess
             cmd = [self._server_path]
-            cmd += self._server_config.to_cli_string().replace('=',
-                                                               ' ').split()
+            cmd += self._server_config.to_cli_string().replace('=', ' ').split()
             # Set environment, update with user config env
             triton_env = os.environ.copy()
 
@@ -77,7 +77,7 @@ class TritonServerLocal(TritonServer):
 
             # List GPUs to be used by tritonserver
             triton_env['CUDA_VISIBLE_DEVICES'] = ','.join(
-                [uuid for uuid in self._gpus])
+                [gpu.device_uuid() for gpu in self._gpus])
 
             if self._log_path:
                 try:
@@ -88,14 +88,17 @@ class TritonServerLocal(TritonServer):
                 self._log_file = DEVNULL
 
             # Construct Popen command
-            self._tritonserver_process = Popen(cmd,
-                                               stdout=self._log_file,
-                                               stderr=STDOUT,
-                                               start_new_session=True,
-                                               universal_newlines=True,
-                                               env=triton_env)
+            try:
+                self._tritonserver_process = Popen(cmd,
+                                                   stdout=self._log_file,
+                                                   stderr=STDOUT,
+                                                   start_new_session=True,
+                                                   universal_newlines=True,
+                                                   env=triton_env)
 
-            logger.info('Triton Server started.')
+                logger.info('Triton Server started.')
+            except Exception as e:
+                raise TritonModelAnalyzerException(e)
 
     def stop(self):
         """
@@ -114,7 +117,7 @@ class TritonServerLocal(TritonServer):
             self._tritonserver_process = None
             if self._log_path:
                 self._log_file.close()
-            logger.info('Triton Server stopped.')
+            logger.info('Stopped Triton Server.')
 
     def cpu_stats(self):
         """

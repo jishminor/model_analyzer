@@ -1,4 +1,4 @@
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020-2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.07-py3
-ARG TRITONSDK_BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.07-py3-sdk
+ARG BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.10-py3
+ARG TRITONSDK_BASE_IMAGE=nvcr.io/nvidia/tritonserver:21.10-py3-sdk
 
-ARG MODEL_ANALYZER_VERSION=1.7.0dev
-ARG MODEL_ANALYZER_CONTAINER_VERSION=21.08dev
+ARG MODEL_ANALYZER_VERSION=1.10.0dev
+ARG MODEL_ANALYZER_CONTAINER_VERSION=21.11dev
 
 FROM ${TRITONSDK_BASE_IMAGE} as sdk
 
@@ -25,7 +25,7 @@ ARG MODEL_ANALYZER_VERSION
 ARG MODEL_ANALYZER_CONTAINER_VERSION
 
 # DCGM version to install for Model Analyzer
-ENV DCGM_VERSION=2.0.13
+ENV DCGM_VERSION=2.2.9
 
 # Ensure apt-get won't prompt for selecting options
 ENV DEBIAN_FRONTEND=noninteractive
@@ -36,13 +36,20 @@ RUN apt-get update && \
 RUN mkdir -p /opt/triton-model-analyzer
 
 # Install DCGM
-RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/datacenter-gpu-manager_${DCGM_VERSION}_amd64.deb && \
-    dpkg -i datacenter-gpu-manager_${DCGM_VERSION}_amd64.deb
+ARG TARGETARCH
+RUN if [ "${TARGETARCH}" = "amd64" ] ; then ARCH_DIR="x86_64" ; fi ; \
+    if [ "${TARGETARCH}" = "arm64" ] ; then ARCH_DIR="sbsa" ; fi ; \
+    apt-get update && apt-get install -y --no-install-recommends software-properties-common && \
+      wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/${ARCH_DIR}/cuda-ubuntu2004.pin && \
+      mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600 && \
+      apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/${ARCH_DIR}/7fa2af80.pub && \
+      add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/${ARCH_DIR}/ /" && \
+      apt-get install -y datacenter-gpu-manager=1:${DCGM_VERSION}
 
 # Install tritonclient
 COPY --from=sdk /workspace/install/python /tmp/tritonclient
 RUN find /tmp/tritonclient -maxdepth 1 -type f -name \
-    "tritonclient-*-manylinux1_x86_64.whl" | xargs printf -- '%s[all]' | \
+    "tritonclient-*-manylinux*.whl" | xargs printf -- '%s[all]' | \
     xargs pip3 install --upgrade && rm -rf /tmp/tritonclient/
 
 WORKDIR /opt/triton-model-analyzer
@@ -59,8 +66,10 @@ RUN chmod +x build_wheel.sh && \
     rm -f perf_analyzer
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install nvidia-pyindex && \
-    python3 -m pip install wheels/triton_model_analyzer-*-manylinux1_x86_64.whl && \
+    python3 -m pip install wheels/triton_model_analyzer-*-manylinux*.whl && \
     python3 -m pip install vowpalwabbit jinja2
+
+RUN apt-get install -y wkhtmltopdf
 
 ENTRYPOINT ["/opt/triton-model-analyzer/nvidia_entrypoint.sh"]
 ENV MODEL_ANALYZER_VERSION ${MODEL_ANALYZER_VERSION}

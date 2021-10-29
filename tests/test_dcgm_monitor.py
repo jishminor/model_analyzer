@@ -27,34 +27,41 @@ from model_analyzer.model_analyzer_exceptions \
 from .common import test_result_collector as trc
 from .mocks.mock_dcgm import MockDCGM
 from .mocks.mock_numba import MockNumba
-from .mocks.mock_dcgm_agent import TEST_UUID
+from .mocks.mock_dcgm_agent import TEST_PCI_BUS_ID, TEST_UUID
 from .mocks.mock_dcgm_field_group_watcher import TEST_RECORD_VALUE
+
+TEST_DEVICE_NAME = 'TEST_DEVICE_NAME'
+TEST_DEVICE_ID = 0
 
 
 class TestDCGMMonitor(trc.TestResultCollector):
+
     def setUp(self):
         self.mock_dcgm = MockDCGM()
         self.mock_numba = MockNumba(mock_paths=[
             'model_analyzer.device.gpu_device_factory',
-            'model_analyzer.monitor.gpu_monitor'
         ])
         self.mock_dcgm.start()
         self.mock_numba.start()
+
+        self._gpus = [
+            GPUDevice(TEST_DEVICE_NAME, TEST_DEVICE_ID, TEST_PCI_BUS_ID,
+                      TEST_UUID)
+        ]
 
     def test_record_memory(self):
         # One measurement every 0.01 seconds
         frequency = 1
         monitoring_time = 10
         metrics = [GPUUsedMemory, GPUFreeMemory]
-        gpus = ['all']
-        dcgm_monitor = DCGMMonitor(gpus, frequency, metrics)
+        dcgm_monitor = DCGMMonitor(self._gpus, frequency, metrics)
         dcgm_monitor.start_recording_metrics()
         time.sleep(monitoring_time)
         records = dcgm_monitor.stop_recording_metrics()
 
         # Assert instance types
         for record in records:
-            self.assertIsInstance(record.device(), GPUDevice)
+            self.assertIsInstance(record.device_uuid(), str)
             self.assertIsInstance(record.value(), float)
             self.assertTrue(record.value() == TEST_RECORD_VALUE)
             self.assertIsInstance(record.timestamp(), int)
@@ -62,8 +69,8 @@ class TestDCGMMonitor(trc.TestResultCollector):
         # The number of records should be dividable by number of metrics
         self.assertTrue(len(records) % len(metrics) == 0)
         self.assertTrue(len(records) > 0)
-        self.assertTrue(records[-1].timestamp() -
-                        records[0].timestamp() >= monitoring_time)
+        self.assertTrue(
+            records[-1].timestamp() - records[0].timestamp() >= monitoring_time)
 
         with self.assertRaises(TritonModelAnalyzerException):
             dcgm_monitor.stop_recording_metrics()
@@ -72,22 +79,21 @@ class TestDCGMMonitor(trc.TestResultCollector):
 
         metrics = ['UndefinedTag']
         with self.assertRaises(TritonModelAnalyzerException):
-            DCGMMonitor(gpus, frequency, metrics)
+            DCGMMonitor(self._gpus, frequency, metrics)
 
     def test_record_power(self):
         # One measurement every 0.01 seconds
         frequency = 1
         monitoring_time = 10
         metrics = [GPUPowerUsage]
-        gpus = ['all']
-        dcgm_monitor = DCGMMonitor(gpus, frequency, metrics)
+        dcgm_monitor = DCGMMonitor(self._gpus, frequency, metrics)
         dcgm_monitor.start_recording_metrics()
         time.sleep(monitoring_time)
         records = dcgm_monitor.stop_recording_metrics()
 
         # Assert instance types
         for record in records:
-            self.assertIsInstance(record.device(), GPUDevice)
+            self.assertIsInstance(record.device_uuid(), str)
             self.assertIsInstance(record.value(), float)
             self.assertTrue(record.value() == TEST_RECORD_VALUE)
             self.assertIsInstance(record.timestamp(), int)
@@ -95,8 +101,8 @@ class TestDCGMMonitor(trc.TestResultCollector):
         # The number of records should be dividable by number of metrics
         self.assertTrue(len(records) % len(metrics) == 0)
         self.assertTrue(len(records) > 0)
-        self.assertTrue(records[-1].timestamp() -
-                        records[0].timestamp() >= monitoring_time)
+        self.assertTrue(
+            records[-1].timestamp() - records[0].timestamp() >= monitoring_time)
 
         dcgm_monitor.destroy()
 
@@ -105,15 +111,14 @@ class TestDCGMMonitor(trc.TestResultCollector):
         frequency = 1
         monitoring_time = 10
         metrics = [GPUUtilization]
-        gpus = ['all']
-        dcgm_monitor = DCGMMonitor(gpus, frequency, metrics)
+        dcgm_monitor = DCGMMonitor(self._gpus, frequency, metrics)
         dcgm_monitor.start_recording_metrics()
         time.sleep(monitoring_time)
         records = dcgm_monitor.stop_recording_metrics()
 
         # Assert instance types
         for record in records:
-            self.assertIsInstance(record.device(), GPUDevice)
+            self.assertIsInstance(record.device_uuid(), str)
             self.assertIsInstance(record.value(), float)
             self.assertTrue(record.value() <= 100)
             self.assertTrue(record.value() == TEST_RECORD_VALUE)
@@ -122,29 +127,17 @@ class TestDCGMMonitor(trc.TestResultCollector):
         # The number of records should be dividable by number of metrics
         self.assertTrue(len(records) % len(metrics) == 0)
         self.assertTrue(len(records) > 0)
-        self.assertTrue(records[-1].timestamp() -
-                        records[0].timestamp() >= monitoring_time)
+        self.assertTrue(
+            records[-1].timestamp() - records[0].timestamp() >= monitoring_time)
 
         dcgm_monitor.destroy()
 
     def test_immediate_start_stop(self):
         frequency = 1
         metrics = [GPUUsedMemory, GPUFreeMemory]
-        gpus = ['all']
-        dcgm_monitor = DCGMMonitor(gpus, frequency, metrics)
+        dcgm_monitor = DCGMMonitor(self._gpus, frequency, metrics)
         dcgm_monitor.start_recording_metrics()
         dcgm_monitor.stop_recording_metrics()
-        dcgm_monitor.destroy()
-
-    def test_gpu_uuid(self):
-        frequency = 1
-        metrics = [GPUUsedMemory, GPUFreeMemory]
-        gpus = ['UndefinedId']
-        with self.assertRaises(TritonModelAnalyzerException):
-            DCGMMonitor(gpus, frequency, metrics)
-
-        gpus = [str(TEST_UUID, encoding='ascii')]
-        dcgm_monitor = DCGMMonitor(gpus, frequency, metrics)
         dcgm_monitor.destroy()
 
     def tearDown(self):

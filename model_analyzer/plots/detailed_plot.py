@@ -12,14 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import matplotlib.pyplot as plt
-import logging
-from matplotlib import patches as mpatches
-from collections import defaultdict
+from model_analyzer.constants import LOGGER_NAME
 from model_analyzer.record.metrics_manager import MetricsManager
 
+import os
+import matplotlib.pyplot as plt
+from matplotlib import patches as mpatches
+from collections import defaultdict
+
+import logging
+
 logging.getLogger('matplotlib').setLevel(logging.ERROR)
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class DetailedPlot:
@@ -58,8 +63,9 @@ class DetailedPlot:
         self._ax_throughput = self._ax_latency.twinx()
 
         latency_axis_label, throughput_axis_label = [
-            metric.header(aggregation_tag='') for metric in
-            MetricsManager.get_metric_types(['perf_latency', 'perf_throughput'])
+            metric.header(aggregation_tag='')
+            for metric in MetricsManager.get_metric_types(
+                ['perf_latency_p99', 'perf_throughput'])
         ]
 
         self._bar_colors = {

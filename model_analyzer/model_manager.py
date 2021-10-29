@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from model_analyzer.constants import LOGGER_NAME
 from model_analyzer.perf_analyzer.perf_config import PerfAnalyzerConfig
 from model_analyzer.output.file_writer import FileWriter
 from .model_analyzer_exceptions import TritonModelAnalyzerException
@@ -26,12 +27,14 @@ from model_analyzer.triton.nginx.server_config import NginxServerConfig
 from model_analyzer.config.run.run_config import RunConfig
 
 
-import logging
 import os
 from collections import defaultdict
 import pickle
 import random
 import shutil
+import logging
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class ModelManager:
@@ -39,6 +42,7 @@ class ModelManager:
     This class handles the search for, creation of, and execution of run configs.
     It also records the best results for each model.
     """
+
     def __init__(self, config, client, server, metrics_manager, result_manager,
                  state_manager, nginx=None):
         """
@@ -89,19 +93,22 @@ class ModelManager:
         # Clear any configs from previous model run
         self._run_config_generator.clear_configs()
 
-        # Update the server's config for this model run
+        # Save the global server config and update the server's config for this model run
+        server_config_copy = self._server.config().copy()
         self._server.update_config(params=model.triton_server_flags())
 
         # Run model inferencing
         if self._config.run_config_search_disable:
-            logging.info(
-                f"Running manual config search for model: {model.model_name()}"
-            )
+            logger.info(
+                f"Running manual config search for model: {model.model_name()}")
             self._run_model_no_search(model)
         else:
-            logging.info(
+            logger.info(
                 f"Running auto config search for model: {model.model_name()}")
             self._run_model_with_search(model)
+
+        # Reset the server args to global config
+        self._server.update_config(params=server_config_copy.server_args())
 
     def cb_search_models(self, models):
         """
@@ -254,10 +261,10 @@ class ModelManager:
             # TODO: Need to sort the values for batch size and concurrency
             # for correct measurment of the GPU memory metrics.
             perf_output_writer = None if \
-                not self._config.perf_output else FileWriter()
+                not self._config.perf_output else FileWriter(self._config.perf_output_path)
             perf_config = run_config.perf_config()
 
-            logging.info(f"Profiling model {perf_config['model-name']}...")
+            logger.info(f"Profiling model {perf_config['model-name']}...")
             measurement = self._metrics_manager.profile_model(
                 run_config=run_config, perf_output_writer=perf_output_writer)
             if measurement is not None:
@@ -397,15 +404,16 @@ class ModelManager:
             except FileExistsError:
                 pass
 
-        self._client.wait_for_server_ready(self._config.client_max_retries)
+        if self._config.triton_launch_mode != 'c_api':
+            self._client.wait_for_server_ready(self._config.client_max_retries)
 
-        if self._client.load_model(model_name=variant_name) == -1:
-            return False
+            if self._client.load_model(model_name=variant_name) == -1:
+                return False
 
-        if self._client.wait_for_model_ready(
-                model_name=variant_name,
-                num_retries=self._config.client_max_retries) == -1:
-            return False
+            if self._client.wait_for_model_ready(
+                    model_name=variant_name,
+                    num_retries=self._config.client_max_retries) == -1:
+                return False
         return True
 
     def _get_measurement_if_config_duplicate(self, run_config):

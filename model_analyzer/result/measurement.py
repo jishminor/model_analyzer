@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from model_analyzer.constants import LOGGER_NAME
+from model_analyzer.perf_analyzer.perf_config import PerfAnalyzerConfig
+from model_analyzer.record.record import RecordType
+
 from functools import total_ordering
 import logging
-from model_analyzer.perf_analyzer.perf_config import PerfAnalyzerConfig
 
-from model_analyzer.record.record import RecordType
+logger = logging.getLogger(LOGGER_NAME)
 
 
 @total_ordering
@@ -152,9 +155,9 @@ class Measurement:
         elif tag in self._gpu_data_from_tag:
             return self._gpu_data_from_tag[tag]
         else:
-            logging.warning(f"No metric corresponding to tag '{tag}' "
-                            "found in measurement. Possibly comparing "
-                            "measurements across devices.")
+            logger.warning(f"No metric corresponding to tag '{tag}' "
+                           "found in measurement. Possibly comparing "
+                           "measurements across devices.")
             return None
 
     def get_metric_value(self, tag, default_value=0):
@@ -198,9 +201,9 @@ class Measurement:
         if tag.replace('_', '-') in self.perf_config():
             return self.perf_config()[tag.replace('_', '-')]
         else:
-            logging.warning(f"No parameter corresponding to tag '{tag}' "
-                            "found in measurement. Possibly comparing "
-                            "measurements across devices.")
+            logger.warning(f"No parameter corresponding to tag '{tag}' "
+                           "found in measurement. Possibly comparing "
+                           "measurements across devices.")
             return None
 
     def gpus_used(self):

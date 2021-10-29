@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,21 +23,25 @@ class PerfAnalyzerConfig:
     """
 
     perf_analyzer_args = [
-        'async', 'sync', 'measurement-interval', 'concurrency-range',
-        'request-rate-range', 'request-distribution', 'request-intervals',
-        'binary-search', 'num-of-sequence', 'latency-threshold', 'max-threads',
+        'service-kind', 'model-signature-name', 'async', 'sync',
+        'measurement-interval', 'concurrency-range', 'request-rate-range',
+        'request-distribution', 'request-intervals', 'binary-search',
+        'num-of-sequence', 'latency-threshold', 'max-threads',
         'stability-percentage', 'max-trials', 'percentile', 'input-data',
         'shared-memory', 'output-shared-memory-size', 'shape',
         'sequence-length', 'string-length', 'string-data', 'measurement-mode',
-        'measurement-request-count'
+        'measurement-request-count', 'streaming', 'grpc-compression-algorithm',
+        'triton-server-directory', 'model-repository'
     ]
 
     input_to_options = [
         'model-name', 'model-version', 'batch-size', 'url', 'protocol',
-        'latency-report-file', 'streaming'
+        'latency-report-file', 'http-header'
     ]
 
     input_to_verbose = ['verbose', 'extra-verbose']
+
+    additive_args = ['input-data', 'shape', 'streaming']
 
     def __init__(self):
         """
@@ -64,10 +68,15 @@ class PerfAnalyzerConfig:
             'url': '-u',
             'protocol': '-i',
             'latency-report-file': '-f',
-            'streaming': '-H'
+            'http-header': '-H'
         }
 
         self._input_to_verbose = {'verbose': '-v', 'extra-verbose': '-v -v'}
+
+        self._additive_args = {
+            (self._input_to_options[k] if k in self._input_to_options else k):
+            None for k in self.additive_args
+        }
 
     @classmethod
     def allowed_keys(cls):
@@ -80,6 +89,17 @@ class PerfAnalyzerConfig:
         """
 
         return cls.perf_analyzer_args + cls.input_to_options + cls.input_to_verbose
+
+    @classmethod
+    def additive_keys(cls):
+        """
+        Returns
+        -------
+        list of str
+            The keys, within allowed_keys, that are additive
+        """
+
+        return cls.additive_args[:]
 
     def update_config(self, params=None):
         """
@@ -156,9 +176,22 @@ class PerfAnalyzerConfig:
         """
 
         # single dashed options, then verbose flags, then main args
-        args = [f'{k} {v}' for k, v in self._options.items() if v]
+        args = []
+        for key, value in self._options.items():
+            if value:
+                if key in self._additive_args:
+                    for additive_value in value:
+                        args.append(f'{key} {additive_value}')
+                else:
+                    args.append(f'{key} {value}')
         args += [k for k, v in self._verbose.items() if v]
-        args += [f'--{k}={v}' for k, v in self._args.items() if v]
+        for key, value in self._args.items():
+            if value:
+                if key in self._additive_args:
+                    for additive_value in value:
+                        args.append(f'--{key}={additive_value}')
+                else:
+                    args.append(f'--{key}={value}')
 
         return ' '.join(args)
 

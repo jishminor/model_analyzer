@@ -31,7 +31,7 @@ CHECKPOINT_DIRECTORY="./checkpoints"
 
 # Create results/checkpoints directories
 mkdir $EXPORT_PATH
-mkdir $CHECKPOINT_DIRECTORY && cp $CHECKPOINT_REPOSITORY/analyze.ckpt $CHECKPOINT_DIRECTORY/0.ckpt
+mkdir $CHECKPOINT_DIRECTORY && cp $CHECKPOINT_REPOSITORY/analyze_p9x.ckpt $CHECKPOINT_DIRECTORY/0.ckpt
 
 # Run the analyzer and check the results
 RET=0
@@ -89,8 +89,8 @@ else
     fi
 fi
 
-rm -rf $EXPORT_PATH/*
-rm -f $CHECKPOINT_DIRECTORY/*.ckpt
+rm -rf $EXPORT_PATH/
+rm -rf $CHECKPOINT_DIRECTORY
 
 if [ $RET -eq 0 ]; then
     echo -e "\n***\n*** Test PASSED\n***"

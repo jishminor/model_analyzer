@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ import unittest
 import re
 from .mocks.mock_config import MockConfig
 from .mocks.mock_numba import MockNumba
+from .mocks.mock_os import MockOSMethods
 
 from .common import test_result_collector as trc
 
@@ -45,9 +46,11 @@ from model_analyzer.constants import \
 
 
 class TestConfig(trc.TestResultCollector):
+
     def _evaluate_config(self, args, yaml_content, subcommand='profile'):
         mock_numba = MockNumba(
             mock_paths=['model_analyzer.config.input.config_command_profile'])
+
         mock_config = MockConfig(args, yaml_content)
         mock_config.start()
         mock_numba.start()
@@ -122,8 +125,7 @@ class TestConfig(trc.TestResultCollector):
     def _assert_model_config_types(self, model_config):
         self.assertIsInstance(model_config.field_type(), ConfigUnion)
 
-        if isinstance(model_config.field_type().raw_value(),
-                      ConfigListGeneric):
+        if isinstance(model_config.field_type().raw_value(), ConfigListGeneric):
             self.assertIsInstance(
                 model_config.field_type().raw_value().container_type(),
                 ConfigUnion)
@@ -196,9 +198,8 @@ class TestConfig(trc.TestResultCollector):
                               ConfigUnion)
         self.assertIsInstance(dims_param.raw_value().raw_value()[0],
                               ConfigUnion)
-        self.assertIsInstance(
-            dims_param.raw_value().raw_value()[0].raw_value(),
-            ConfigListGeneric)
+        self.assertIsInstance(dims_param.raw_value().raw_value()[0].raw_value(),
+                              ConfigListGeneric)
         self.assertIsInstance(
             dims_param.raw_value().raw_value()[0].raw_value().raw_value()[0],
             ConfigPrimitive)
@@ -214,11 +215,19 @@ class TestConfig(trc.TestResultCollector):
         self.assertIsInstance(model_config, ConfigUnion)
         self.assertIsInstance(model_config.raw_value(), ConfigPrimitive)
 
+    def setUp(self):
+        # Mock path validation
+        self.mock_os = MockOSMethods(
+            mock_paths=['model_analyzer.config.input.config_utils'])
+        self.mock_os.start()
+
+    def tearDown(self):
+        self.mock_os.stop()
+
     def test_config(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file', '--profile-models',
-            'vgg11'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file', '--profile-models', 'vgg11'
         ]
         yaml_content = 'model_repository: yaml_repository'
         config = self._evaluate_config(args, yaml_content)
@@ -244,8 +253,8 @@ class TestConfig(trc.TestResultCollector):
 
     def test_range_and_list_values(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = 'profile_models: model_1,model_2'
         config = self._evaluate_config(args, yaml_content)
@@ -289,9 +298,8 @@ profile_models:
             ['model_1'].raw_value()['parameters'], ConfigObject)
 
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file', '--profile-models',
-            'model_1,model_2'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file', '--profile-models', 'model_1,model_2'
         ]
         yaml_content = """
 batch_sizes:
@@ -346,8 +354,8 @@ batch_sizes:
 
     def test_object(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
 profile_models:
@@ -458,8 +466,8 @@ profile_models:
 
     def test_constraints(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
 profile_models:
@@ -548,8 +556,8 @@ profile_models:
 
     def test_validation(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
 
         # end key should not be included in concurrency
@@ -566,8 +574,8 @@ profile_models:
         self._assert_error_on_evaluate_config(args, yaml_content)
 
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
 
         yaml_content = """
@@ -583,8 +591,8 @@ profile_models:
 
     def test_config_model(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
 profile_models:
@@ -647,8 +655,8 @@ profile_models:
                                                expected_model_configs)
 
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
             profile_models:
@@ -687,8 +695,8 @@ profile_models:
                                                expected_model_configs)
 
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
             profile_models:
@@ -719,12 +727,10 @@ profile_models:
                                        'instance_group': [[{
                                            'kind': ['KIND_GPU'],
                                            'count': [1]
-                                       }],
-                                                          [{
-                                                              'kind':
-                                                              ['KIND_CPU'],
-                                                              'count': [1]
-                                                          }]]
+                                       }], [{
+                                           'kind': ['KIND_CPU'],
+                                           'count': [1]
+                                       }]]
                                    })
         ]
         self._assert_equality_of_model_configs(model_configs,
@@ -782,7 +788,7 @@ profile_models:
                     perf_analyzer_flags:
                         measurement-interval: 10000
                         model-version: 2
-                        streaming: true
+                        streaming: "header:value"
 
             """
         config = self._evaluate_config(args, yaml_content)
@@ -797,11 +803,51 @@ profile_models:
                                    perf_analyzer_flags={
                                        'measurement-interval': 10000,
                                        'model-version': 2,
-                                       'streaming': True
+                                       'streaming': 'header:value'
                                    })
         ]
         self._assert_equality_of_model_configs(model_configs,
                                                expected_model_configs)
+
+        yaml_content = """
+            profile_models:
+            -
+                vgg_16_graphdef:
+                    perf_analyzer_flags:
+                        measurement-interval: 10000
+                        model-version: 2
+                        shape: ["name1:1,2,3", "name2:4,5,6"]
+
+            """
+        config = self._evaluate_config(args, yaml_content)
+        model_configs = config.get_all_config()['profile_models']
+        expected_model_configs = [
+            ConfigModelProfileSpec('vgg_16_graphdef',
+                                   parameters={
+                                       'batch_sizes': [1],
+                                       'concurrency': []
+                                   },
+                                   objectives={'perf_throughput': 10},
+                                   perf_analyzer_flags={
+                                       'measurement-interval': 10000,
+                                       'model-version': 2,
+                                       'shape': ["name1:1,2,3", "name2:4,5,6"]
+                                   })
+        ]
+        self._assert_equality_of_model_configs(model_configs,
+                                               expected_model_configs)
+
+        yaml_content = """
+            profile_models:
+            -
+                vgg_16_graphdef:
+                    perf_analyzer_flags:
+                        latency_report_file: ["file1", "file2"]
+
+            """
+        with self.assertRaises(TritonModelAnalyzerException):
+            # latency_report_file is not additive
+            config = self._evaluate_config(args, yaml_content)
 
         yaml_content = """
             profile_models:
@@ -826,7 +872,7 @@ profile_models:
                 test_plot:
                     title: Throughput vs. Latency
                     x_axis: perf_throughput
-                    y_axis: perf_latency
+                    y_axis: perf_latency_p99
             """
         config = self._evaluate_config(args, yaml_content, subcommand='report')
         plot_configs = config.get_all_config()['plots']
@@ -834,7 +880,7 @@ profile_models:
             ConfigPlot('test_plot',
                        title='Throughput vs. Latency',
                        x_axis='perf_throughput',
-                       y_axis='perf_latency')
+                       y_axis='perf_latency_p99')
         ]
         self._assert_equality_of_plot_configs(plot_configs,
                                               expected_plot_configs)
@@ -845,11 +891,11 @@ profile_models:
             - test_plot1:
                 title: Throughput vs. Latency
                 x_axis: perf_throughput
-                y_axis: perf_latency
+                y_axis: perf_latency_p99
             - test_plot2:
                 title: GPU Memory vs. Latency
                 x_axis: gpu_used_memory
-                y_axis: perf_latency
+                y_axis: perf_latency_p99
             """
         config = self._evaluate_config(args, yaml_content, subcommand='report')
         plot_configs = config.get_all_config()['plots']
@@ -857,11 +903,11 @@ profile_models:
             ConfigPlot('test_plot1',
                        title='Throughput vs. Latency',
                        x_axis='perf_throughput',
-                       y_axis='perf_latency'),
+                       y_axis='perf_latency_p99'),
             ConfigPlot('test_plot2',
                        title='GPU Memory vs. Latency',
                        x_axis='gpu_used_memory',
-                       y_axis='perf_latency')
+                       y_axis='perf_latency_p99')
         ]
         self._assert_equality_of_plot_configs(plot_configs,
                                               expected_plot_configs)
@@ -872,11 +918,11 @@ profile_models:
                 test_plot1:
                     title: Throughput vs. Latency
                     x_axis: perf_throughput
-                    y_axis: perf_latency
+                    y_axis: perf_latency_p99
                 test_plot2:
                     title: GPU Memory vs. Latency
                     x_axis: gpu_used_memory
-                    y_axis: perf_latency
+                    y_axis: perf_latency_p99
             """
         config = self._evaluate_config(args, yaml_content, subcommand='report')
         plot_configs = config.get_all_config()['plots']
@@ -884,11 +930,11 @@ profile_models:
             ConfigPlot('test_plot1',
                        title='Throughput vs. Latency',
                        x_axis='perf_throughput',
-                       y_axis='perf_latency'),
+                       y_axis='perf_latency_p99'),
             ConfigPlot('test_plot2',
                        title='GPU Memory vs. Latency',
                        x_axis='gpu_used_memory',
-                       y_axis='perf_latency')
+                       y_axis='perf_latency_p99')
         ]
         self._assert_equality_of_plot_configs(plot_configs,
                                               expected_plot_configs)
@@ -900,27 +946,27 @@ profile_models:
                     test_plot1:
                         title: Throughput vs. Latency
                         x_axis: perf_throughput
-                        y_axis: perf_latency
+                        y_axis: perf_latency_p99
                         monotonic: True
                     test_plot2:
                         title: GPU Memory vs. Latency
                         x_axis: gpu_used_memory
-                        y_axis: perf_latency
+                        y_axis: perf_latency_p99
                         monotonic: False
             """
         config = self._evaluate_config(args, yaml_content, subcommand='report')
-        plot_configs = config.get_all_config(
-        )['report_model_configs'][0].plots()
+        plot_configs = config.get_all_config()['report_model_configs'][0].plots(
+        )
         expected_plot_configs = [
             ConfigPlot('test_plot1',
                        title='Throughput vs. Latency',
                        x_axis='perf_throughput',
-                       y_axis='perf_latency',
+                       y_axis='perf_latency_p99',
                        monotonic=True),
             ConfigPlot('test_plot2',
                        title='GPU Memory vs. Latency',
                        x_axis='gpu_used_memory',
-                       y_axis='perf_latency',
+                       y_axis='perf_latency_p99',
                        monotonic=False)
         ]
         self._assert_equality_of_plot_configs(plot_configs,
@@ -1023,8 +1069,8 @@ profile_models:
 
     def test_autofill(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
         profile_models:
@@ -1124,7 +1170,7 @@ profile_models:
         objectives:
           gpu_used_memory: 10
         constraints:
-          perf_latency:
+          perf_latency_p99:
             max: 8000
         model_config_parameters:
             instance_group:
@@ -1137,21 +1183,22 @@ profile_models:
         config = self._evaluate_config(args, yaml_content)
         model_configs = config.get_all_config()['profile_models']
         expected_model_configs = [
-            ConfigModelProfileSpec('vgg_16_graphdef',
-                                   parameters={
-                                       'batch_sizes': [16, 32],
-                                       'concurrency': [2, 4]
-                                   },
-                                   objectives={'gpu_used_memory': 10},
-                                   constraints={'perf_latency': {
-                                       'max': 8000
-                                   }},
-                                   model_config_parameters={
-                                       'instance_group': [[{
-                                           'kind': ['KIND_GPU'],
-                                           'count': [1]
-                                       }]]
-                                   })
+            ConfigModelProfileSpec(
+                'vgg_16_graphdef',
+                parameters={
+                    'batch_sizes': [16, 32],
+                    'concurrency': [2, 4]
+                },
+                objectives={'gpu_used_memory': 10},
+                constraints={'perf_latency_p99': {
+                    'max': 8000
+                }},
+                model_config_parameters={
+                    'instance_group': [[{
+                        'kind': ['KIND_GPU'],
+                        'count': [1]
+                    }]]
+                })
         ]
         self._assert_equality_of_model_configs(model_configs,
                                                expected_model_configs)
@@ -1171,7 +1218,7 @@ profile_models:
         objectives:
           - gpu_used_memory
         constraints:
-          perf_latency:
+          perf_latency_p99:
             max: 8000
         model_config_parameters:
             instance_group:
@@ -1184,21 +1231,22 @@ profile_models:
         config = self._evaluate_config(args, yaml_content)
         model_configs = config.get_all_config()['profile_models']
         expected_model_configs = [
-            ConfigModelProfileSpec('vgg_16_graphdef',
-                                   parameters={
-                                       'batch_sizes': [16, 32],
-                                       'concurrency': [2, 4]
-                                   },
-                                   objectives={'gpu_used_memory': 10},
-                                   constraints={'perf_latency': {
-                                       'max': 8000
-                                   }},
-                                   model_config_parameters={
-                                       'instance_group': [[{
-                                           'kind': ['KIND_GPU'],
-                                           'count': [1]
-                                       }]]
-                                   })
+            ConfigModelProfileSpec(
+                'vgg_16_graphdef',
+                parameters={
+                    'batch_sizes': [16, 32],
+                    'concurrency': [2, 4]
+                },
+                objectives={'gpu_used_memory': 10},
+                constraints={'perf_latency_p99': {
+                    'max': 8000
+                }},
+                model_config_parameters={
+                    'instance_group': [[{
+                        'kind': ['KIND_GPU'],
+                        'count': [1]
+                    }]]
+                })
         ]
         self._assert_equality_of_model_configs(model_configs,
                                                expected_model_configs)
@@ -1206,9 +1254,9 @@ profile_models:
         yaml_content = """
 objectives:
   perf_throughput: 10
-  perf_latency: 5
+  perf_latency_p99: 5
 constraints:
-    perf_latency:
+    perf_latency_p99:
       max: 8000
     gpu_used_memory:
       max: 10000
@@ -1235,7 +1283,7 @@ profile_models:
             - 1
             - 2
         constraints:
-          perf_latency:
+          perf_latency_p99:
             max: 8000
 """
         # Test autofill batch sizes
@@ -1249,25 +1297,26 @@ profile_models:
                                    },
                                    objectives={'gpu_used_memory': 10},
                                    constraints={
-                                       'perf_latency': {
+                                       'perf_latency_p99': {
                                            'max': 8000
                                        },
                                        'gpu_used_memory': {
                                            'max': 10000
                                        }
                                    }),
-            ConfigModelProfileSpec('vgg_19_graphdef',
-                                   parameters={
-                                       'batch_sizes': [1, 2],
-                                       'concurrency': [2, 4]
-                                   },
-                                   objectives={
-                                       'perf_throughput': 10,
-                                       'perf_latency': 5
-                                   },
-                                   constraints={'perf_latency': {
-                                       'max': 8000
-                                   }})
+            ConfigModelProfileSpec(
+                'vgg_19_graphdef',
+                parameters={
+                    'batch_sizes': [1, 2],
+                    'concurrency': [2, 4]
+                },
+                objectives={
+                    'perf_throughput': 10,
+                    'perf_latency_p99': 5
+                },
+                constraints={'perf_latency_p99': {
+                    'max': 8000
+                }})
         ]
         self._assert_equality_of_model_configs(model_configs,
                                                expected_model_configs)
@@ -1278,7 +1327,7 @@ profile_models:
         """
 
         for constraint_shorthand in [
-            ('--latency-budget', 'max', 'perf_latency'),
+            ('--latency-budget', 'max', 'perf_latency_p99'),
             ('--min-throughput', 'min', 'perf_throughput')
         ]:
             args = [
@@ -1388,8 +1437,8 @@ profile_models:
 
     def test_triton_server_flags(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
             profile_models: model1, model2
@@ -1398,11 +1447,10 @@ profile_models:
                 backend-config: test_backend_config
             """
         config = self._evaluate_config(args, yaml_content)
-        self.assertDictEqual(
-            config.get_all_config()['triton_server_flags'], {
-                'strict-model-config': 'False',
-                'backend-config': 'test_backend_config'
-            })
+        self.assertDictEqual(config.get_all_config()['triton_server_flags'], {
+            'strict-model-config': 'False',
+            'backend-config': 'test_backend_config'
+        })
 
         yaml_content = """
             profile_models: model1, model2
@@ -1414,7 +1462,7 @@ profile_models:
             config = self._evaluate_config(args, yaml_content)
 
         yaml_content = """
-            profile_models: 
+            profile_models:
                 model1:
                     triton_server_flags:
                         strict_model_config: false
@@ -1430,8 +1478,8 @@ profile_models:
 
     def test_triton_server_environment(self):
         args = [
-            'model-analyzer', 'profile', '--model-repository',
-            'cli_repository', '-f', 'path-to-config-file'
+            'model-analyzer', 'profile', '--model-repository', 'cli_repository',
+            '-f', 'path-to-config-file'
         ]
         yaml_content = """
             profile_models: model1, model2
@@ -1513,7 +1561,7 @@ profile_models:
         plots:
             throughput_v_latency:
                 title: Throughput vs. Latency
-                x_axis: perf_latency
+                x_axis: perf_latency_p99
                 y_axis: perf_throughput
                 monotonic: True
         """
@@ -1528,7 +1576,7 @@ profile_models:
         expected_config_plot = {
             'throughput_v_latency': {
                 'title': 'Throughput vs. Latency',
-                'x_axis': 'perf_latency',
+                'x_axis': 'perf_latency_p99',
                 'y_axis': 'perf_throughput',
                 'monotonic': True
             }
@@ -1562,13 +1610,13 @@ profile_models:
                 plots:
                   model_specific_throughput_v_latency:
                     title: model specific title
-                    x_axis: perf_latency
+                    x_axis: perf_latency_p99
                     y_axis: perf_throughput
                     monotonic: True
         plots:
             throughput_v_latency:
                 title: Throughput vs. Latency
-                x_axis: perf_latency
+                x_axis: perf_latency_p99
                 y_axis: perf_throughput
                 monotonic: True
         """
@@ -1589,6 +1637,76 @@ profile_models:
         self.assertEqual(model_specific_plot.name(),
                          'model_specific_throughput_v_latency')
         self.assertEqual(model_specific_plot.title(), 'model specific title')
+
+    def test_path_validation(self):
+
+        # Test parent path validator
+        args = [
+            'model-analyzer', 'profile', '--model-repository', '/', '-f',
+            'path-to-config-file'
+        ]
+        yaml_content = """
+        checkpoint_directory: /test
+        profile_models:
+            - model1
+            - model2
+        """
+
+        self._evaluate_config(args, yaml_content, subcommand='profile')
+
+        self.mock_os.set_os_path_exists_return_value(False)
+        with self.assertRaises(TritonModelAnalyzerException):
+            self._evaluate_config(args, yaml_content, subcommand='profile')
+        self.mock_os.set_os_path_exists_return_value(True)
+
+        # Test file path validator
+        yaml_content = """
+        triton_install_path: /opt/triton-model-analyzer/tests/test_config.py
+        profile_models:
+            - model1
+            - model2
+        """
+
+        self._evaluate_config(args, yaml_content, subcommand='profile')
+
+        self.mock_os.set_os_path_exists_return_value(False)
+        with self.assertRaises(TritonModelAnalyzerException):
+            self._evaluate_config(args, yaml_content, subcommand='profile')
+        self.mock_os.set_os_path_exists_return_value(True)
+
+        args = ['model-analyzer', 'analyze', '-f', 'path-to-config-file']
+        yaml_content = """
+        export_path: /opt/triton-model-analyzer/tests
+        analysis_models:
+            - model1
+            - model2
+        """
+
+        self._evaluate_config(args, yaml_content, subcommand='analyze')
+
+        self.mock_os.set_os_path_exists_return_value(False)
+        with self.assertRaises(TritonModelAnalyzerException):
+            self._evaluate_config(args, yaml_content, subcommand='analyze')
+        self.mock_os.set_os_path_exists_return_value(True)
+
+        # Test the binary path validator
+        args = [
+            'model-analyzer', 'profile', '--model-repository', '/', '-f',
+            'path-to-config-file'
+        ]
+        yaml_content = """
+        triton_server_path: tritonserver
+        profile_models:
+            - model1
+            - model2
+        """
+
+        self._evaluate_config(args, yaml_content, subcommand='profile')
+
+        self.mock_os.set_os_path_exists_return_value(False)
+        with self.assertRaises(TritonModelAnalyzerException):
+            self._evaluate_config(args, yaml_content, subcommand='profile')
+        self.mock_os.set_os_path_exists_return_value(True)
 
 
 if __name__ == '__main__':
