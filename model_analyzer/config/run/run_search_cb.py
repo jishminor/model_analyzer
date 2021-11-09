@@ -16,12 +16,15 @@ from model_analyzer.config.input.objects.config_model_profile_spec \
     import ConfigModelProfileSpec
 from model_analyzer.triton.model.model_config import ModelConfig
 from model_analyzer.result.constraint_manager import ConstraintManager
+from model_analyzer.constants import LOGGER_NAME
 
 import random
 import logging
 from copy import deepcopy
 
 from vowpalwabbit import pyvw
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class RunSearchCB():
@@ -55,7 +58,7 @@ class RunSearchCB():
         else:
             vw_string = f'--cb_explore {len(self._user_model_config_sweeps)} '
 
-        if not logging.getLogger().isEnabledFor(logging.DEBUG):
+        if not logger.isEnabledFor(logging.DEBUG):
             vw_string += '--quiet '
         
         if config.exploration == 'epsilon':
@@ -100,7 +103,7 @@ class RunSearchCB():
 
         vw_text = self._to_vw_example_format(context)
         pmf = self._vw.predict(vw_text)
-        logging.debug(pmf)
+        logger.debug(pmf)
         self._active_model_config_index, prob = self._sample_custom_pmf(pmf)
         model_sweep = self._user_model_config_sweeps[self._active_model_config_index]
         model_config = self._generate_model_config_from_sweep(model_sweep)
@@ -126,10 +129,7 @@ class RunSearchCB():
         # Overwrite model config keys with values from model_sweep
         model_config_dict = model_config.get_config()
         for key, value in model_sweep.items():
-            # Account for optimization params
-            if key is armnn:
-                 
-            elif value is not None:
+            if value is not None:
                 model_config_dict[key] = value
         model_config = ModelConfig.create_from_dictionary(
             model_config_dict)
@@ -158,11 +158,11 @@ class RunSearchCB():
 
 
                 # If all constraints met, evaluate performance against metrics
-                logging.info(f'Constraints met: {constraints_met}')
+                logger.info(f'Constraints met: {constraints_met}')
                 if constraints_met:
                     for key, target in self._model.objectives().items():
                         achieved = measurement.get_metric(key).value()
-                        logging.info(f'Target: {key}, Desired: {target}, Achieved: {achieved}')
+                        logger.info(f'Target: {key}, Desired: {target}, Achieved: {achieved}')
                         
                         # Register cost as percent difference for current objective
                         costs[key] = (abs(achieved - target) / ((achieved + target) / 2.0)) * 100
@@ -175,7 +175,7 @@ class RunSearchCB():
                 # If measurement came back None, give max penalty
                 cost = 1000
 
-            logging.info(f'Cost is {cost}')
+            logger.info(f'Cost is {cost}')
 
             # Inform VW of what happened so we can learn from it
             vw_format = self._vw.parse(self._to_vw_example_format(context, (cost, prob)), pyvw.vw.lContextualBandit)
@@ -246,7 +246,7 @@ class RunSearchCB():
             action_string += '| ' + f'{context_string}\n'
 
         # Strip the last newline
-        logging.debug(action_string)
+        logger.debug(action_string)
         return action_string[:-1]
 
     def _sample_custom_pmf(self, pmf):

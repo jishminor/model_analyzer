@@ -120,7 +120,7 @@ class ModelManager:
             os.mkdir(self._config.nginx_config_directory)
         except FileExistsError:
             shutil.rmtree(self._config.nginx_config_directory)
-            logging.warning('Overriding the nginx conf directory '
+            logger.warning('Overriding the nginx conf directory '
                             f'"{self._config.nginx_config_directory}"...')
             os.mkdir(self._config.nginx_config_directory)
 
@@ -290,7 +290,7 @@ class ModelManager:
                 context_file.close()
 
         for i in range(1, num_iterations + 1):
-            logging.info(f'Iteration: {i}')
+            logger.info(f'Iteration: {i}')
             # Generate parameters for current round of evaluation
             if self._config.context_list:
                 concurrency = dictionary_list[i - 1]['concurrency-range']
@@ -313,7 +313,7 @@ class ModelManager:
 
             # Get predicted model_config and corresponding probability from vw based on the context passed
             model_config, prob = self._run_search_cb.get_vw_predicted_model_config(context)
-            logging.info(f'Context: {context}, Action: {model_config.to_dict()}, Prob: {prob}')
+            logger.info(f'Context: {context}, Action: {model_config.to_dict()}, Prob: {prob}')
 
             # Get the name of the selected model instance
             current_model_instance_name = model_config.get_field('name')
@@ -363,9 +363,9 @@ class ModelManager:
                 not self._config.perf_output else FileWriter()
 
             # Generate RunConfig from model_config and perf_config
-            run_config = RunConfig(self._run_search_cb.get_model_name(), model_config, perf_config)
+            run_config = RunConfig(self._run_search_cb.get_model_name(), model_config, perf_config, None)
 
-            logging.info(f"Profiling model {current_model_instance_name}...")
+            logger.info(f"Profiling model {current_model_instance_name}...")
 
             # Only profile model if request batch size is <= max batch size for model
             if int(context['batch-size']) <= int(model_config.to_dict()['maxBatchSize']):

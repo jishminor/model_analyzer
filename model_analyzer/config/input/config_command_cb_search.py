@@ -83,6 +83,23 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 'Specifies how long (seconds) to gather server-only metrics'))
         self._add_config(
             ConfigField(
+                'use_local_gpu_monitor',
+                field_type=ConfigPrimitive(bool),
+                flags=['--use-local-gpu-monitor'],
+                default_value=DEFAULT_USE_LOCAL_GPU_MONITOR,
+                description=
+                'Specify whether GPU metrics should be monitored by local DCGM monitor. '
+                'If this flag is set, model analyzer will query metrics directly via DCGM.'
+            ))
+        self._add_config(
+            ConfigField(
+                'collect_cpu_metrics',
+                field_type=ConfigPrimitive(bool),
+                flags=['--collect-cpu-metrics'],
+                default_value=DEFAULT_COLLECT_CPU_METRICS,
+                description='Specify whether CPU metrics are collected or not'))
+        self._add_config(
+            ConfigField(
                 'gpus',
                 flags=['--gpus'],
                 field_type=ConfigListString(),
@@ -246,21 +263,33 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
         constraints_scheme = ConfigObject(
             schema={
                 'perf_throughput':
-                ConfigObject(schema={
-                    'min': ConfigPrimitive(int),
-                }),
+                    ConfigObject(schema={
+                        'min': ConfigPrimitive(int),
+                    }),
+                'perf_latency_avg':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
+                'perf_latency_p90':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
+                'perf_latency_p95':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
+                'perf_latency_p99':
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
                 'perf_latency':
-                ConfigObject(schema={
-                    'max': ConfigPrimitive(int),
-                }),
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
                 'gpu_used_memory':
-                ConfigObject(schema={
-                    'max': ConfigPrimitive(int),
-                }),
-                'cpu_used_ram':
-                ConfigObject(schema={
-                    'max': ConfigPrimitive(int),
-                }),
+                    ConfigObject(schema={
+                        'max': ConfigPrimitive(int),
+                    }),
             })
         self._add_config(
             ConfigField(
@@ -503,3 +532,6 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
 
             new_profile_models[model.model_name()] = new_model
         self._fields['profile_models'].set_value(new_profile_models)
+
+        # For CB Search need to set analysis models to profile models
+        self.analysis_models = self.profile_models

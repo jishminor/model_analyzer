@@ -125,7 +125,7 @@ class Analyzer:
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 
-    def cb_search(self, client, nginx):
+    def cb_search(self, client, nginx, gpus):
         """
         Subcommand: CB_SEARCH
 
@@ -137,6 +137,8 @@ class Analyzer:
             Instance used to load/unload models
         nginx : NginxServer
             Nginx Instance to proxy triton api requests
+        gpus: List of GPUDevices
+            The gpus being used to profile
         
         Raises
         ------
@@ -148,12 +150,13 @@ class Analyzer:
                 f"Expected config of type {ConfigCommandCBSearch},"
                 " got {type(self._config)}.")
 
-        logging.info('Profiling server only metrics...')
+        logger.info('Profiling server only metrics...')
 
         self._metrics_manager = MetricsManager(
             config=self._config,
             client=client,
             server=self._server,
+            gpus=gpus,
             result_manager=self._result_manager,
             state_manager=self._state_manager)
 
@@ -167,10 +170,12 @@ class Analyzer:
             state_manager=self._state_manager)
 
         # Get metrics for server only
-        self._server.start()
-        client.wait_for_server_ready(self._config.client_max_retries)
-        self._metrics_manager.profile_server()
-        self._server.stop()
+        if self._config.triton_launch_mode != 'c_api':
+            logger.info('Profiling server only metrics...')
+            self._server.start()
+            client.wait_for_server_ready(self._config.client_max_retries)
+            self._metrics_manager.profile_server()
+            self._server.stop()
 
         # For each model in profile_models, attempt to learn optimal model configuration
         self._model_manager.cb_search_models(self._config.profile_models)
@@ -178,7 +183,7 @@ class Analyzer:
         profiled_model_list = list(
             self._state_manager.get_state_variable(
                 'ResultManager.results').keys())
-        logging.info(
+        logger.info(
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 

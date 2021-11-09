@@ -165,14 +165,14 @@ def get_nginx_handle(config):
 
     if config.nginx_launch_mode == 'local':
         nginx_config = NginxServerConfig(analyzer_config=config.get_all_config())
-        logging.info('Creating a local Nginx Server...')
+        logger.info('Creating a local Nginx Server...')
         server = NginxServerFactory.create_server_local(
             path=config.nginx_server_path,
             config=nginx_config,
             log_path=config.nginx_output_path)
     elif config.nginx_launch_mode == 'docker':
         nginx_config = NginxServerConfig(analyzer_config=config.get_all_config())
-        logging.info('Starting a Nginx Server using docker...')
+        logger.info('Starting a Nginx Server using docker...')
         server = NginxServerFactory.create_server_docker(
             image=config.nginx_docker_image,
             config=nginx_config,
@@ -341,18 +341,23 @@ def main():
             analyzer.profile(client=client, gpus=gpus)
 
         elif args.subcommand == 'cb-search':
+
+            # Set up devices
+            gpus = GPUDeviceFactory().verify_requested_gpus(config.gpus)
+
             # Check/create output model repository
             create_output_model_repository(config)
 
-            client, server = get_triton_handles(config)
+            client, server = get_triton_handles(config, gpus)
             nginx = get_nginx_handle(config)
+            state_manager = AnalyzerStateManager(config=config, server=server)
 
             # Only check for exit after the events that take a long time.
             if state_manager.exiting():
                 return
 
             analyzer = Analyzer(config, server, state_manager)
-            analyzer.cb_search(client=client, nginx=nginx)
+            analyzer.cb_search(client=client, nginx=nginx, gpus=gpus)
 
         elif args.subcommand == 'analyze':
 
