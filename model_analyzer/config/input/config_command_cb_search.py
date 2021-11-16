@@ -361,6 +361,14 @@ class ConfigCommandCBSearch(ConfigCommandProfile):
                 description='List of the models to be profiled'))
         self._add_config(
             ConfigField(
+                'pretrain',
+                flags=['--pretrain'],
+                field_type=ConfigPrimitive(bool),
+                parser_args={'action': 'store_true'},
+                default_value=DEFAULT_CB_SEARCH_PRETRAIN,
+                description="Enable loading of VW model from previous run"))
+        self._add_config(
+            ConfigField(
                 'adf',
                 flags=['--adf'],
                 field_type=ConfigPrimitive(bool),

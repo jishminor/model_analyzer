@@ -131,13 +131,15 @@ class ModelManager:
             if model_config_parameters:
                 user_model_config_sweeps = \
                     self._run_config_generator.generate_model_config_combinations(
-                        model_config_parameters)
+                        model_config_parameters)            
 
             # user_model_config_sweeps contains all possible model configs for current model 
             # to use as searched action space
             self._run_search_cb = RunSearchCB(self._config, model, user_model_config_sweeps)
 
             self._execute_vw_search(self._config.iterations)
+
+            self._run_search_cb.save_model()
 
             self._state_manager.save_checkpoint()
 
@@ -278,8 +280,7 @@ class ModelManager:
         """
         Executes the run configs stored in the run
         config generator until there are none left.
-        Returns obtained measurements. Also sends them
-        to the result manager
+        Sends measurements to the result manager
         """
 
         measurements = []
@@ -309,6 +310,7 @@ class ModelManager:
 
             # Check if exiting
             if self._state_manager.exiting():
+                self._run_search_cb.save_model()
                 return measurements
 
             # Get predicted model_config and corresponding probability from vw based on the context passed

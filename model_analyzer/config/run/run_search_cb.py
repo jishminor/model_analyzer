@@ -20,7 +20,9 @@ from model_analyzer.constants import LOGGER_NAME
 
 import random
 import logging
+import os
 from copy import deepcopy
+from math import exp
 
 from vowpalwabbit import pyvw
 
@@ -48,8 +50,9 @@ class RunSearchCB():
         # Holds most recently selected active model config index
         self._active_model_config_index = 0
 
-        # Shuffle the model config sweeps
-        random.shuffle(self._user_model_config_sweeps)
+        # Shuffle the model config sweeps. Shuffling is deterministic in order
+        # to maintain order across involcations of the same search config
+        random.Random(4).shuffle(self._user_model_config_sweeps)
 
         # Instantiate learner in VW for online learning
         vw_string = ''
@@ -57,9 +60,6 @@ class RunSearchCB():
             vw_string += '--cb_explore_adf -q CA '
         else:
             vw_string = f'--cb_explore {len(self._user_model_config_sweeps)} '
-
-        if not logger.isEnabledFor(logging.DEBUG):
-            vw_string += '--quiet '
         
         if config.exploration == 'epsilon':
             vw_string += f'--epsilon {config.epsilon}'
@@ -74,7 +74,22 @@ class RunSearchCB():
         elif config.exploration == 'rnd':
             vw_string += f'--rnd {config.rnd} --epsilon {config.epsilon}'
 
-        self._vw = pyvw.vw(vw_string) 
+        # Check for existing vw model
+        vw_model_file_name = self._model.model_name() + vw_string.replace("--", "_").replace(" ", "_")
+        self._latest_checkpoint_model = os.path.join(
+            self._config.checkpoint_directory, f"{vw_model_file_name}.model")
+
+        if not logger.isEnabledFor(logging.DEBUG):
+            vw_string += '--quiet '
+
+        vw_string += '--save_resume '
+
+        if os.path.exists(self._latest_checkpoint_model) and self._config.pretrain:
+            logger.info(f"Loading vw model from file {self._latest_checkpoint_model}")
+            self._vw = pyvw.vw(f"-i {self._latest_checkpoint_model} -f {self._latest_checkpoint_model}")
+        else:
+            logger.info("Starting a fresh vw run.")
+            self._vw = pyvw.vw(vw_string + f" -f {self._latest_checkpoint_model}")
 
     def _remove_known_invalid_model_configs(self):
         # Remove all items in actions list where max batch size < preferred_batchsize
@@ -89,6 +104,9 @@ class RunSearchCB():
         # Account for triton bug where tensorrt can't be applied to model running on both cpu and gpu
         # self._user_model_config_sweeps = [x for x in self._user_model_config_sweeps if not(
             # x[1] > 0 and x[4] > 0 and x[5])]
+
+    def save_model(self):
+        self._vw.save(str(self._latest_checkpoint_model))
 
     def get_model_name(self):
         return self._model.model_name()
@@ -144,7 +162,11 @@ class RunSearchCB():
         Register cost of measurement generated from profiling model with VW
         Cost is measured as delta from objectives
 
-        Cost is meausred as logical and of all contraints met * (sum of %diff of actual vs objectives)
+        Cost is meausred as: (logical nand of all contraints met) * (1 - (2 / (1 + e^3x)))
+        where x is %diff of actual vs objectives. This function is asymptotically bounded at
+        1 when x > 0, so 1 can be max penalty given.
+
+        Note that VW expects only to minimize cost function, so smaller numbers mean larger reward
         """
 
         if not(self._no_learn):
@@ -164,16 +186,17 @@ class RunSearchCB():
                         achieved = measurement.get_metric(key).value()
                         logger.info(f'Target: {key}, Desired: {target}, Achieved: {achieved}')
                         
-                        # Register cost as percent difference for current objective
-                        costs[key] = (abs(achieved - target) / ((achieved + target) / 2.0)) * 100
+                        # Calculate cost for current objective as described above
+                        percent_diff = (abs(achieved - target) / ((achieved + target) / 2.0))
+                        costs[key] = (1 - (2 / (1 + exp(3 * percent_diff))))
 
                     # Sum all costs to generate final cost
                     cost = sum(costs.values())
                 else:
-                    cost = 1000
+                    cost = 1 * len(self._model.objectives().keys())
             else:
                 # If measurement came back None, give max penalty
-                cost = 1000
+                cost = 1 * len(self._model.objectives().keys())
 
             logger.info(f'Cost is {cost}')
 
