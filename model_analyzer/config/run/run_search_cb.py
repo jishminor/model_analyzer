@@ -162,7 +162,7 @@ class RunSearchCB():
         Register cost of measurement generated from profiling model with VW
         Cost is measured as delta from objectives
 
-        Cost is meausred as: (logical nand of all contraints met) * (1 - (2 / (1 + e^3x)))
+        Cost is meausred as: (logical nand of all constraints met) * (1 - (2 / (1 + e^3x)))
         where x is %diff of actual vs objectives. This function is asymptotically bounded at
         1 when x > 0, so 1 can be max penalty given.
 
