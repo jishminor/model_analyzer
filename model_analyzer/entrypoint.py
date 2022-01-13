@@ -371,6 +371,25 @@ def main():
                 config, server,
                 AnalyzerStateManager(config=config, server=server))
             analyzer.report(mode=args.mode)
+        elif args.subcommand == 'admission-control':
+
+            # Set up devices
+            gpus = GPUDeviceFactory().verify_requested_gpus(config.gpus)
+
+            # Check/create output model repository
+            create_output_model_repository(config)
+
+            client, server = get_triton_handles(config, gpus)
+            nginx = get_nginx_handle(config)
+            state_manager = AnalyzerStateManager(config=config, server=server)
+
+            # Only check for exit after the events that take a long time.
+            if state_manager.exiting():
+                return
+
+            analyzer = Analyzer(config, server, state_manager)
+            analyzer.admission_control(client=client, nginx=nginx, gpus=gpus)
+
     finally:
         if server is not None:
             server.stop()

@@ -44,7 +44,7 @@ class ModelManager:
     """
 
     def __init__(self, config, client, server, metrics_manager, result_manager,
-                 state_manager, nginx=None):
+                 state_manager, nginx=None, admission_controller=None):
         """
         Parameters
         ----------
@@ -62,6 +62,8 @@ class ModelManager:
             The object that handles serializing the state of the analyzer and saving.
         nginx : NginxServer
             Nginx Instance to proxy triton api requests
+        admission_controller : AdmissionController
+            Admission Controller Instance to handle model fit
         """
 
         self._config = config
@@ -75,6 +77,7 @@ class ModelManager:
         self._run_config_generator = RunConfigGenerator(config=config,
                                                         client=self._client)
         self._nginx = nginx
+        self._admission_controller = admission_controller
 
         # Generate the output model repository path folder.
         self._output_model_repo_path = config.output_model_repository_path
@@ -142,6 +145,33 @@ class ModelManager:
             self._run_search_cb.save_model()
 
             self._state_manager.save_checkpoint()
+
+    def admission_control(self, models):
+        """
+        Runs triton with a wrapping api to determine whether a model will fit
+        """
+        # Create nginx conf directory if not exists
+        try:
+            os.mkdir(self._config.nginx_config_directory)
+        except FileExistsError:
+            shutil.rmtree(self._config.nginx_config_directory)
+            logger.warning('Overriding the nginx conf directory '
+                            f'"{self._config.nginx_config_directory}"...')
+            os.mkdir(self._config.nginx_config_directory)
+        
+        # Start Triton and Nginx server, and load model variant based on the predicted model_config
+        self._nginx.start()
+        self._server.start()
+        if not self._create_and_load_model_variant(
+                original_name=self._run_search_cb.get_model_name(),
+                variant_config=model_config):
+            self._server.stop()
+            self._nginx.stop()
+
+        
+
+        self._server.stop()
+        self._nginx.stop()
 
     def _run_model_no_search(self, model):
         """

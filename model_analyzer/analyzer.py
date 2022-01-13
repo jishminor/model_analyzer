@@ -187,6 +187,69 @@ class Analyzer:
             f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
         )
 
+    def admission_control(self, client, nginx, gpus):
+
+        """
+        Subcommand: ADMISSION_CONTROL
+
+        Runs triton with wrapping API to determine if a supplied model can be loaded
+
+        Parameters
+        ----------
+        client : TritonClient
+            Instance used to load/unload models
+        nginx : NginxServer
+            Nginx Instance to proxy triton api requests
+        gpus: List of GPUDevices
+            The gpus being used to profile
+        
+        Raises
+        ------
+        TritonModelAnalyzerException
+        """
+
+        if not isinstance(self._config, ConfigCommandCBSearch):
+            raise TritonModelAnalyzerException(
+                f"Expected config of type {ConfigCommandCBSearch},"
+                " got {type(self._config)}.")
+
+        logger.info('Profiling server only metrics...')
+
+        self._metrics_manager = MetricsManager(
+            config=self._config,
+            client=client,
+            server=self._server,
+            gpus=gpus,
+            result_manager=self._result_manager,
+            state_manager=self._state_manager)
+
+        self._model_manager = ModelManager(
+            config=self._config,
+            client=client,
+            server=self._server,
+            nginx=nginx,
+            result_manager=self._result_manager,
+            metrics_manager=self._metrics_manager,
+            state_manager=self._state_manager)
+
+        # Get metrics for server only
+        if self._config.triton_launch_mode != 'c_api':
+            logger.info('Profiling server only metrics...')
+            self._server.start()
+            client.wait_for_server_ready(self._config.client_max_retries)
+            self._metrics_manager.profile_server()
+            self._server.stop()
+
+        # For each model in profile_models, attempt to learn optimal model configuration
+        self._model_manager.admission_control(self._config.profile_models)
+
+        profiled_model_list = list(
+            self._state_manager.get_state_variable(
+                'ResultManager.results').keys())
+        logger.info(
+            f"Finished profiling. Obtained measurements for models: {profiled_model_list}."
+        )
+
     def analyze(self, mode, quiet):
         """
         subcommand: ANALYZE
