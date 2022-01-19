@@ -128,9 +128,10 @@ class TritonServerLocal(TritonServer):
             server_process = psutil.Process(self._tritonserver_process.pid)
             process_memory_info = server_process.memory_full_info()
             system_memory_info = psutil.virtual_memory()
+            process_cpu_utilization = server_process.cpu_percent(0.5)
 
             # Divide by 1.0e6 to convert from bytes to MB
             return (process_memory_info.uss //
-                    1.0e6), (system_memory_info.available // 1.0e6)
+                    1.0e6), (system_memory_info.available // 1.0e6), process_cpu_utilization
         else:
             return 0.0, 0.0

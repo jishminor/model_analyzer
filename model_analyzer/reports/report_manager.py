@@ -463,6 +463,7 @@ class ReportManager:
                     measurement.get_metric_value('perf_latency_p99'),
                     measurement.get_metric_value('perf_throughput'),
                     measurement.get_metric_value('cpu_used_ram'),
+                    measurement.get_metric_value('cpu_utilization'),
                     measurement.get_metric_value('gpu_used_memory'),
                     round(measurement.get_metric_value('gpu_utilization'), 1)
                 ]
@@ -475,7 +476,8 @@ class ReportManager:
                     model_config.dynamic_batching_string(), instance_group_str,
                     measurement.get_metric_value('perf_latency_p99'),
                     measurement.get_metric_value('perf_throughput'),
-                    measurement.get_metric_value('cpu_used_ram')
+                    measurement.get_metric_value('cpu_used_ram'),
+                    measurement.get_metric_value('cpu_utilization')
                 ]
                 summary_table.insert_row_by_index(row)
         return summary_table, summary_sentence
@@ -525,6 +527,7 @@ class ReportManager:
                     measurement.get_metric_value('perf_server_compute_infer'),
                     measurement.get_metric_value('perf_throughput'),
                     measurement.get_metric_value('cpu_used_ram'),
+                    measurement.get_metric_value('cpu_utilization'),
                     measurement.get_metric_value('gpu_used_memory'),
                     round(measurement.get_metric_value('gpu_utilization'), 1)
                 ]
@@ -539,7 +542,8 @@ class ReportManager:
                     measurement.get_metric_value('perf_server_compute_input'),
                     measurement.get_metric_value('perf_server_compute_infer'),
                     measurement.get_metric_value('perf_throughput'),
-                    measurement.get_metric_value('cpu_used_ram')
+                    measurement.get_metric_value('cpu_used_ram'),
+                    measurement.get_metric_value('cpu_utilization')
                 ]
                 detailed_table.insert_row_by_index(row)
         return detailed_table

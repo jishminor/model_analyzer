@@ -16,6 +16,7 @@ from .monitor import Monitor
 
 from model_analyzer.record.types.cpu_available_ram import CPUAvailableRAM
 from model_analyzer.record.types.cpu_used_ram import CPUUsedRAM
+from model_analyzer.record.types.cpu_utilization import CPUUtilization
 
 from model_analyzer.model_analyzer_exceptions import TritonModelAnalyzerException
 
@@ -25,7 +26,7 @@ class CPUMonitor(Monitor):
     A monitor for measuring the CPU usage of tritonserver during inference
     """
 
-    cpu_metrics = {CPUAvailableRAM, CPUUsedRAM}
+    cpu_metrics = {CPUAvailableRAM, CPUUsedRAM, CPUUtilization}
 
     def __init__(self, server, frequency, metrics):
         """
@@ -48,7 +49,7 @@ class CPUMonitor(Monitor):
         Get memory info of process and 
         append
         """
-        if (CPUUsedRAM in self._metrics) or (CPUAvailableRAM in self._metrics):
+        if (CPUUsedRAM in self._metrics) or (CPUAvailableRAM in self._metrics) or (CPUUtilization in self._metrics):
             used_mem, free_mem = self._server.cpu_stats()
             if CPUUsedRAM in self._metrics:
                 self._cpu_memory_records.append(CPUUsedRAM(value=used_mem))

@@ -314,3 +314,50 @@ class ModelConfig:
                 group_str_list.append(f"{group_count}/{group_kind}")
             return ','.join(group_str_list)
         return f"{count}/{kind}"
+
+    @staticmethod
+    def preferred_batch_size_string_to_config(preferred_batch_size_string: str):
+        """
+        Parameters
+        ----------
+        preferred_batch_size_string : str
+            preferred batch size string
+
+        Returns
+        -------
+        list
+            dynamic batching dict from input string
+        """
+        if preferred_batch_size_string in ["Disabled", "N/A"]:
+            return None
+
+        return preferred_batch_size_string.strip('][').split(' ')
+        
+    @staticmethod
+    def instance_group_string_to_config(instance_group_string):
+        """
+        Parameters
+        ----------
+        instance_group_string : str
+            dynamic batching string
+
+        Returns
+        -------
+        list
+            instance group list from input string
+        """
+
+        result = []
+
+        instance_groups = instance_group_string.split(",")
+
+        for instance_group in instance_groups:
+            tokens = instance_group.split("/")
+            count = tokens[0]
+            kind = tokens[1]
+            result.append({"count": count, "kind": f"KIND_{kind}"})
+
+        return result
+
+
+

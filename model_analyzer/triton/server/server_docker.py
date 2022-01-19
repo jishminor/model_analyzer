@@ -183,7 +183,8 @@ class TritonServerDocker(TritonServer):
 
     def cpu_stats(self):
         """
-        Returns the CPU memory usage and CPU available memory in MB
+        Returns the CPU memory usage, CPU available memory in MB,
+        and CPU utilization
         """
 
         cmd = 'bash -c "pmap -x $(pgrep tritonserver) | tail -n1 | awk \'{print $4}\'"'
@@ -193,6 +194,10 @@ class TritonServerDocker(TritonServer):
         _, available_mem_bytes = self._tritonserver_container.exec_run(
             cmd=cmd, stream=False)
 
+        cmd = 'bash -c "top -b -n 2 -d 0.2 -p $(pgrep tritonserver) | tail -1 | awk \'{print $9}\'"'
+        _, cpu_utilization = self._tritonserver_container.exec_run(
+            cmd=cmd, stream=False)
+
         # Divide by 1.0e6 to convert from kilobytes to MB
         return float(used_mem_bytes.decode("utf-8")) // 1.0e3, float(
-            available_mem_bytes.decode("utf-8")) // 1.0e3
+            available_mem_bytes.decode("utf-8")) // 1.0e3, float(cpu_utilization.decode("utf-8"))

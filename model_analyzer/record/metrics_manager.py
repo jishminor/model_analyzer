@@ -49,7 +49,8 @@ class MetricsManager:
         "perf_server_queue", "perf_server_compute_input",
         "perf_server_compute_infer", "perf_server_compute_output",
         "gpu_used_memory", "gpu_free_memory", "gpu_utilization",
-        "gpu_power_usage", "cpu_available_ram", "cpu_used_ram"
+        "gpu_power_usage", "cpu_available_ram", "cpu_used_ram",
+        "cpu_utilization"
     ]
 
     def __init__(self, config, client, server, gpus, result_manager,

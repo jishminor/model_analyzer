@@ -398,6 +398,7 @@ are supported under this object type:
 | `gpu_utilization`  | Use the GPU utilization as the objective.              |
 | `cpu_used_ram`     | Use RAM used by the model as the objective.            |
 | `cpu_free_ram`     | Use RAM not used by the model as the objective.        |
+| `cpu_utilization`  | Use the CPU utilization as the objective.              |
 
 An example `objectives` that will sort the results by throughput looks like
 below:
